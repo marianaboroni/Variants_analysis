@@ -165,10 +165,10 @@ map_consequence_to_maf_class <- function(consequence, variant_type = NULL) {
 run_maftools_plots <- function(maf_path, maf_table, cfg, outdir, manifest) {
   top_n <- cfg_get(cfg, c("visualization", "oncoplot_top_genes"), 20)
   if (nrow(maf_table) == 0) {
-    return(add_figure_manifest(manifest, NA_character_, "maftools", "skipped", "no somatic variants for maftools"))
+    return(add_figure_manifest(manifest, NA_character_, "maftools", "maftools", "skipped", "no somatic variants for maftools"))
   }
   if (!requireNamespace("maftools", quietly = TRUE)) {
-    return(add_figure_manifest(manifest, NA_character_, "maftools", "skipped", "R package maftools is not installed"))
+    return(add_figure_manifest(manifest, NA_character_, "maftools", "maftools", "skipped", "R package maftools is not installed"))
   }
 
   result <- tryCatch({
@@ -191,7 +191,7 @@ run_maftools_plots <- function(maf_path, maf_table, cfg, outdir, manifest) {
   })
 
   if (inherits(result, "maftools_error")) {
-    return(add_figure_manifest(manifest, NA_character_, "maftools", "failed", result$message))
+    return(add_figure_manifest(manifest, NA_character_, "maftools", "maftools", "failed", result$message))
   }
   manifest <- add_figure_manifest(manifest, result$summary_pdf, "maftools_summary", "maftools", "written", "")
   add_figure_manifest(manifest, result$oncoplot_pdf, "maftools_oncoplot", "maftools", "written", paste("top", top_n, "genes"))
@@ -199,17 +199,17 @@ run_maftools_plots <- function(maf_path, maf_table, cfg, outdir, manifest) {
 
 run_fallback_oncoplot <- function(maf_table, cfg, outdir, manifest) {
   if (!requireNamespace("ggplot2", quietly = TRUE)) {
-    return(add_figure_manifest(manifest, NA_character_, "oncoplot_fallback", "skipped", "R package ggplot2 is not installed"))
+    return(add_figure_manifest(manifest, NA_character_, "oncoplot_fallback", "oncoplot", "skipped", "R package ggplot2 is not installed"))
   }
   if (nrow(maf_table) == 0) {
-    return(add_figure_manifest(manifest, NA_character_, "oncoplot_fallback", "skipped", "no somatic variants"))
+    return(add_figure_manifest(manifest, NA_character_, "oncoplot_fallback", "oncoplot", "skipped", "no somatic variants"))
   }
 
   top_n <- cfg_get(cfg, c("visualization", "oncoplot_top_genes"), 20)
   dt <- data.table::as.data.table(maf_table)
   gene_counts <- dt[Hugo_Symbol != "Unknown", .N, by = Hugo_Symbol][order(-N)]
   if (nrow(gene_counts) == 0) {
-    return(add_figure_manifest(manifest, NA_character_, "oncoplot_fallback", "skipped", "no gene symbols available"))
+    return(add_figure_manifest(manifest, NA_character_, "oncoplot_fallback", "oncoplot", "skipped", "no gene symbols available"))
   }
   top_genes <- gene_counts$Hugo_Symbol[seq_len(min(top_n, nrow(gene_counts)))]
   plot_dt <- dt[Hugo_Symbol %in% top_genes]
@@ -263,11 +263,11 @@ maf_class_priority <- function(x) {
 
 plot_variant_class_stack <- function(variants, cfg, outdir, manifest) {
   if (!requireNamespace("ggplot2", quietly = TRUE)) {
-    return(add_figure_manifest(manifest, NA_character_, "classification_stack", "skipped", "R package ggplot2 is not installed"))
+    return(add_figure_manifest(manifest, NA_character_, "classification_stack", "classification", "skipped", "R package ggplot2 is not installed"))
   }
   dt <- data.table::as.data.table(variants)
   if (nrow(dt) == 0 || !"final_class" %in% names(dt)) {
-    return(add_figure_manifest(manifest, NA_character_, "classification_stack", "skipped", "no final_class data"))
+    return(add_figure_manifest(manifest, NA_character_, "classification_stack", "classification", "skipped", "no final_class data"))
   }
   plot_dt <- dt[, .N, by = .(sample_id, final_class)]
   sample_order <- dt[, .N, by = sample_id][order(-N)]$sample_id
@@ -289,10 +289,10 @@ plot_variant_class_stack <- function(variants, cfg, outdir, manifest) {
 
 plot_tmb_bar <- function(tmb_summary, cfg, outdir, manifest) {
   if (!requireNamespace("ggplot2", quietly = TRUE)) {
-    return(add_figure_manifest(manifest, NA_character_, "tmb_bar", "skipped", "R package ggplot2 is not installed"))
+    return(add_figure_manifest(manifest, NA_character_, "tmb_bar", "tmb", "skipped", "R package ggplot2 is not installed"))
   }
   if (is.null(tmb_summary) || nrow(tmb_summary) == 0) {
-    return(add_figure_manifest(manifest, NA_character_, "tmb_bar", "skipped", "no TMB summary"))
+    return(add_figure_manifest(manifest, NA_character_, "tmb_bar", "tmb", "skipped", "no TMB summary"))
   }
   dt <- data.table::as.data.table(tmb_summary)
   dt <- dt[order(-tmb_mut_per_mb)]
@@ -317,10 +317,10 @@ plot_tmb_bar <- function(tmb_summary, cfg, outdir, manifest) {
 
 plot_driver_summary <- function(variants, cfg, outdir, manifest) {
   if (!requireNamespace("ggplot2", quietly = TRUE)) {
-    return(add_figure_manifest(manifest, NA_character_, "driver_summary", "skipped", "R package ggplot2 is not installed"))
+    return(add_figure_manifest(manifest, NA_character_, "driver_summary", "driver", "skipped", "R package ggplot2 is not installed"))
   }
   if (!"driver_class" %in% names(variants)) {
-    return(add_figure_manifest(manifest, NA_character_, "driver_summary", "skipped", "no driver_class data"))
+    return(add_figure_manifest(manifest, NA_character_, "driver_summary", "driver", "skipped", "no driver_class data"))
   }
   dt <- data.table::as.data.table(variants)
   plot_dt <- dt[, .N, by = .(sample_id, driver_class)]
@@ -343,12 +343,12 @@ plot_driver_summary <- function(variants, cfg, outdir, manifest) {
 
 plot_qc_depth_vaf <- function(variants, cfg, outdir, manifest) {
   if (!requireNamespace("ggplot2", quietly = TRUE)) {
-    return(add_figure_manifest(manifest, NA_character_, "qc_depth_vaf", "skipped", "R package ggplot2 is not installed"))
+    return(add_figure_manifest(manifest, NA_character_, "qc_depth_vaf", "qc", "skipped", "R package ggplot2 is not installed"))
   }
   dt <- data.table::as.data.table(sample_variants_for_plot(variants, cfg))
   dt <- dt[!is.na(dp) & !is.na(vaf)]
   if (nrow(dt) == 0) {
-    return(add_figure_manifest(manifest, NA_character_, "qc_depth_vaf", "skipped", "no DP/VAF data"))
+    return(add_figure_manifest(manifest, NA_character_, "qc_depth_vaf", "qc", "skipped", "no DP/VAF data"))
   }
 
   p_vaf <- ggplot2::ggplot(dt, ggplot2::aes(x = vaf, fill = final_class)) +
@@ -377,15 +377,15 @@ plot_qc_depth_vaf <- function(variants, cfg, outdir, manifest) {
 
 plot_recurrence_population <- function(variants, cfg, outdir, manifest) {
   if (!requireNamespace("ggplot2", quietly = TRUE)) {
-    return(add_figure_manifest(manifest, NA_character_, "recurrence_population", "skipped", "R package ggplot2 is not installed"))
+    return(add_figure_manifest(manifest, NA_character_, "recurrence_population", "recurrence", "skipped", "R package ggplot2 is not installed"))
   }
   dt <- data.table::as.data.table(sample_variants_for_plot(variants, cfg))
   if (!all(c("variant_cohort_freq", "max_pop_af") %in% names(dt))) {
-    return(add_figure_manifest(manifest, NA_character_, "recurrence_population", "skipped", "missing recurrence or population AF"))
+    return(add_figure_manifest(manifest, NA_character_, "recurrence_population", "recurrence", "skipped", "missing recurrence or population AF"))
   }
   dt <- dt[!is.na(variant_cohort_freq) | !is.na(max_pop_af)]
   if (nrow(dt) == 0) {
-    return(add_figure_manifest(manifest, NA_character_, "recurrence_population", "skipped", "no recurrence/population AF data"))
+    return(add_figure_manifest(manifest, NA_character_, "recurrence_population", "recurrence", "skipped", "no recurrence/population AF data"))
   }
   dt$max_pop_af_plot <- pmax(dt$max_pop_af, 1e-6, na.rm = TRUE)
   dt$max_pop_af_plot[is.infinite(dt$max_pop_af_plot)] <- 1e-6
@@ -405,16 +405,16 @@ plot_recurrence_population <- function(variants, cfg, outdir, manifest) {
 
 plot_clonality_outputs <- function(variants, clonality_summary, cfg, outdir, manifest) {
   if (!requireNamespace("ggplot2", quietly = TRUE)) {
-    return(add_figure_manifest(manifest, NA_character_, "clonality", "skipped", "R package ggplot2 is not installed"))
+    return(add_figure_manifest(manifest, NA_character_, "clonality", "clonality", "skipped", "R package ggplot2 is not installed"))
   }
   if (!"clonality_class" %in% names(variants)) {
-    return(add_figure_manifest(manifest, NA_character_, "clonality", "skipped", "no clonality_class data"))
+    return(add_figure_manifest(manifest, NA_character_, "clonality", "clonality", "skipped", "no clonality_class data"))
   }
   dt <- data.table::as.data.table(variants)
   somatic_classes <- c("high_confidence_somatic", "probable_somatic")
   dt <- dt[final_class %in% somatic_classes]
   if (nrow(dt) == 0) {
-    return(add_figure_manifest(manifest, NA_character_, "clonality", "skipped", "no somatic variants"))
+    return(add_figure_manifest(manifest, NA_character_, "clonality", "clonality", "skipped", "no somatic variants"))
   }
 
   count_dt <- dt[, .N, by = .(sample_id, clonality_class)]
