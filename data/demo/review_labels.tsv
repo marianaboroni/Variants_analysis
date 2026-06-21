@@ -1,0 +1,5 @@
+sample_id	tumor_type	chrom	pos	ref	alt	gene	protein_change	reviewed_label	evidence	reviewer	review_date	notes
+S3	UCEC	7	140453136	A	T	BRAF	p.V600E	true_somatic	demo_hotspot_oncokb_cosmic	MB	2026-06-21	Known hotspot with adequate depth and VAF.
+S5	UCEC	12	25398284	C	A	KRAS	p.G12V	true_somatic	demo_hotspot_oncokb_cosmic	MB	2026-06-21	Known hotspot with adequate depth and VAF.
+S1	UCEC	17	7673803	C	T	TP53	p.R175H	germline	demo_population_af_high	MB	2026-06-21	High population AF in demo table.
+S4	UCEC	7	140453136	A	T	BRAF	p.V600E	artifact	demo_low_depth_low_quality	MB	2026-06-21	Low depth and low technical quality despite hotspot identity.

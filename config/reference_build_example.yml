@@ -1,0 +1,12 @@
+reference_inputs:
+  oncokb: null
+  oncokb_delimiter: "\t"
+  cosmic: null
+  cosmic_delimiter: "\t"
+  driver_genes: null
+  driver_genes_delimiter: "\t"
+  hotspots: null
+  hotspots_delimiter: "\t"
+
+output:
+  dir: "references/oncokb_cosmic"

@@ -1,0 +1,22 @@
+flowchart TD
+  A["Tabela de variantes<br/>Mutect2 / DRAGEN / VEP"] --> B["Padronizacao<br/>sample_id, variant_id, locus_id"]
+  M["Metadados<br/>tipo tumoral, ensaio, pureza"] -.-> B
+  R["Recursos externos<br/>populacionais, OncoKB, COSMIC,<br/>drivers, hotspots, preditores"] -.-> F
+
+  B --> C["Features tecnicas<br/>DP, ref_count, alt_count, VAF,<br/>TLOD, MBQ, MMQ, STRANDQ"]
+  C --> D["QC e hard filters<br/>limiares adaptativos por ensaio<br/>e qualidade da amostra"]
+  D --> E["Recorrencia interna<br/>pseudo-panel of normals<br/>pan-coorte e por tipo tumoral"]
+  E --> F["Scores integrados<br/>somatico, germinativo, artefato"]
+  F --> G["Validacao externa<br/>OncoKB / COSMIC / hotspots"]
+  G --> H["Classificacao final tumor-only<br/>high_confidence_somatic | probable_somatic<br/>uncertain | probable_germline | probable_artifact"]
+
+  H --> I["ML semi-supervisionado<br/>pseudo-rotulos TP/FP<br/>probabilidade de verdadeiro positivo"]
+  H --> J["Driver vs passenger<br/>genes drivers, hotspots,<br/>dNdScv e CHASMplus inputs"]
+  H --> K["TMB<br/>variantes somaticas contaveis<br/>divididas por callable_mb"]
+  H --> L["Clonalidade<br/>CCF com pureza/CN<br/>fallback por VAF"]
+  H --> N["Figuras e tabelas<br/>oncoplots, QC, TMB,<br/>drivers, clonalidade"]
+
+  I --> N
+  J --> N
+  K --> N
+  L --> N

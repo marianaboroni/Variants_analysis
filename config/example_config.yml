@@ -1,0 +1,153 @@
+input:
+  variants: "data/variants_vep.tsv"
+  delimiter: "\t"
+  sample_metadata: null
+  metadata_delimiter: "\t"
+
+output:
+  dir: "results/tumor_only_filter"
+  minimal_outputs: true
+  generate_filter_report: true
+  generate_plots: true
+
+cohort:
+  cancer_type: "UCEC"
+  min_samples_for_recurrence_model: 20
+  recurrent_variant_fraction_artifact: 0.05
+  recurrent_locus_fraction_artifact: 0.08
+  batch_column: null
+
+cancer:
+  default_tumor_type: "UCEC"
+
+technical_filters:
+  min_depth: 20
+  min_alt_count_snv: 5
+  min_alt_count_indel: 8
+  min_af_snv: 0.03
+  min_af_indel: 0.05
+  min_tlod: 6
+  min_mbq: 25
+  min_mmq: 40
+
+hard_filters:
+  enabled: true
+  assay: "WGS"
+  adaptive_depth_fraction: 0.35
+  adaptive_q25_depth_fraction: 0.50
+  missing_required_metrics_fail: false
+  sample_qc:
+    min_median_depth: 25
+    warn_median_depth: 30
+    min_callable_fraction: 0.70
+    max_contamination: 0.05
+    max_duplicate_rate: 0.35
+
+population_filters:
+  common_af_threshold: 0.01
+  low_frequency_af_threshold: 0.001
+  prioritize_brazilian_databases: true
+  use_population_columns:
+    - GMAF
+    - AFR_AF
+    - AMR_AF
+    - EAS_AF
+    - EUR_AF
+    - SAS_AF
+    - gnomADe_AF
+    - gnomADe_AFR_AF
+    - gnomADe_AMR_AF
+    - gnomADe_NFE_AF
+    - gnomADg_AF
+    - gnomADg_AFR_AF
+    - gnomADg_AMR_AF
+    - gnomADg_NFE_AF
+    - ABraOM_AF
+    - AbraOM_AF
+    - ABraOM_MAF
+    - BIPMed_AF
+    - SABE_AF
+    - sabe_af
+
+scoring:
+  high_confidence_somatic: 0.75
+  probable_somatic: 0.55
+  probable_germline: 0.70
+  probable_artifact: 0.70
+  validation_rescue_somatic_min: 0.45
+
+validation:
+  oncokb: null
+  cosmic: null
+
+driver_resources:
+  driver_genes: null
+  driver_genes_delimiter: "\t"
+  hotspots: null
+  hotspots_delimiter: "\t"
+
+driver_scoring:
+  known_driver: 0.75
+  probable_driver: 0.60
+  possible_driver: 0.40
+  min_tumor_type_samples_for_recurrence_driver: 5
+
+ml_filter:
+  enabled: true
+  incremental_learning: true
+  allow_ml_override_hard_filters: false
+  min_curated_labels_for_training: 50
+  review_labels: null
+  review_labels_delimiter: "\t"
+  manual_label_weight: 5
+  pseudo_label_weight: 1
+  tumor_type_models: true
+  seed: 20260621
+  max_training_rows: 200000
+  min_positive_labels: 50
+  min_negative_labels: 50
+  per_tumor_min_positive_labels: 25
+  per_tumor_min_negative_labels: 25
+  true_positive_cutoff: 0.60
+  use_pseudo_labels: true
+  conservative_pseudo_labels_only: true
+
+active_learning:
+  enabled: true
+  max_candidates: 500
+  include_reviewed: false
+  uncertainty_score_min: 0.70
+  recurrent_variant_fraction: 0.05
+  min_samples_for_recurrence: 20
+
+tmb:
+  callable_mb: 30
+  use_ml_filter: false
+  ml_true_positive_cutoff: 0.60
+  intermediate_threshold: 5
+  high_threshold: 10
+
+clonality:
+  enabled: true
+  default_total_cn: 2
+  default_multiplicity: 1
+  normal_cn: 2
+  clonal_ccf_cutoff: 0.85
+  subclonal_ccf_cutoff: 0.55
+  clonal_vaf_proxy_cutoff: 0.30
+  subclonal_vaf_proxy_cutoff: 0.12
+  min_variants_for_clustering: 10
+  max_clusters_per_sample: 3
+  seed: 20260621
+
+visualization:
+  enabled: true
+  dir: "results/tumor_only_filter/figures"
+  include_final_classes:
+    - high_confidence_somatic
+    - probable_somatic
+  use_ml_filter: false
+  ml_true_positive_cutoff: 0.60
+  oncoplot_top_genes: 20
+  max_plot_points: 200000
+  seed: 20260621

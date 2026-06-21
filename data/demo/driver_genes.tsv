@@ -1,0 +1,7 @@
+gene	tumor_type	role	source	confidence
+TP53	UCEC	tumor_suppressor	CGC;IntOGen	canonical
+BRAF	PANCANCER	oncogene	CGC;OncoKB	canonical
+KRAS	UCEC	oncogene	CGC;OncoKB	canonical
+ARID1A	UCEC	tumor_suppressor	CGC;IntOGen	canonical
+PIK3CA	UCEC	oncogene	CGC;IntOGen	canonical
+

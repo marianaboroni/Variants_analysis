@@ -1,0 +1,5 @@
+tumor_type	Hugo_Symbol	HGVSp_Short	source	evidence
+PANCANCER	BRAF	p.V600E	OncoKB;COSMIC	canonical_hotspot
+UCEC	KRAS	p.G12V	OncoKB;COSMIC	recurrent_hotspot
+PANCANCER	KRAS	p.G12V	OncoKB;COSMIC	canonical_hotspot
+

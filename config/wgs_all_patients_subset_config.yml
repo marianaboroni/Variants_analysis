@@ -1,0 +1,125 @@
+input:
+  variants: "data/test/WGS_all_patients_first100k.tsv"
+  delimiter: "\t"
+  sample_qc: null
+  sample_metadata: null
+  metadata_delimiter: "\t"
+
+output:
+  dir: "results/wgs_all_patients_subset_filter"
+
+cohort:
+  cancer_type: "UCEC"
+  min_samples_for_recurrence_model: 20
+  recurrent_variant_fraction_artifact: 0.05
+  recurrent_locus_fraction_artifact: 0.08
+  batch_column: null
+
+cancer:
+  default_tumor_type: "UCEC"
+
+hard_filters:
+  enabled: true
+  assay: "WGS"
+  adaptive_depth_fraction: 0.35
+  adaptive_q25_depth_fraction: 0.50
+  missing_required_metrics_fail: false
+
+technical_filters:
+  min_depth: 20
+  min_alt_count_snv: 5
+  min_alt_count_indel: 8
+  min_af_snv: 0.03
+  min_af_indel: 0.05
+  min_tlod: 6
+  min_mbq: 25
+  min_mmq: 40
+
+population_filters:
+  common_af: 0.005
+  rare_af: 0.001
+  use_population_columns:
+    - GMAF
+    - gnomADe_AF
+    - ABraOM_AF
+    - AbraOM_AF
+    - ABraOM_MAF
+    - BIPMed_AF
+
+scoring:
+  high_confidence_somatic: 0.75
+  probable_somatic: 0.55
+  probable_germline: 0.70
+  probable_artifact: 0.70
+  validation_rescue_somatic_min: 0.45
+
+validation:
+  oncokb: null
+  cosmic: null
+
+driver_resources:
+  driver_genes: null
+  driver_genes_delimiter: "\t"
+  hotspots: null
+  hotspots_delimiter: "\t"
+
+driver_scoring:
+  known_driver: 0.75
+  probable_driver: 0.60
+  possible_driver: 0.40
+  min_tumor_type_samples_for_recurrence_driver: 5
+
+ml_filter:
+  enabled: true
+  review_labels: null
+  review_labels_delimiter: "\t"
+  manual_label_weight: 5
+  pseudo_label_weight: 1
+  tumor_type_models: true
+  seed: 20260621
+  max_training_rows: 200000
+  min_positive_labels: 50
+  min_negative_labels: 50
+  per_tumor_min_positive_labels: 25
+  per_tumor_min_negative_labels: 25
+  true_positive_cutoff: 0.60
+
+active_learning:
+  enabled: true
+  max_candidates: 500
+  include_reviewed: false
+  uncertainty_score_min: 0.70
+  recurrent_variant_fraction: 0.05
+  min_samples_for_recurrence: 20
+
+tmb:
+  callable_mb: 30
+  use_ml_filter: false
+  ml_true_positive_cutoff: 0.60
+  intermediate_threshold: 5
+  high_threshold: 10
+
+clonality:
+  enabled: true
+  default_total_cn: 2
+  default_multiplicity: 1
+  normal_cn: 2
+  clonal_ccf_cutoff: 0.85
+  subclonal_ccf_cutoff: 0.55
+  clonal_vaf_proxy_cutoff: 0.30
+  subclonal_vaf_proxy_cutoff: 0.12
+  min_variants_for_clustering: 10
+  max_clusters_per_sample: 3
+  seed: 20260621
+
+visualization:
+  enabled: true
+  dir: "results/wgs_all_patients_subset_filter/figures"
+  include_final_classes:
+    - high_confidence_somatic
+    - probable_somatic
+  use_ml_filter: false
+  ml_true_positive_cutoff: 0.60
+  oncoplot_top_genes: 20
+  max_plot_points: 200000
+  seed: 20260621

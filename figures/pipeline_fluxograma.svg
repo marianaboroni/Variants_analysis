@@ -1,0 +1,152 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1450" viewBox="0 0 1600 1450" role="img" aria-labelledby="title desc">
+  <title id="title">Fluxograma do pipeline tumor-only</title>
+  <desc id="desc">Fluxograma esquematico do pipeline de filtragem de variantes tumor-only, incluindo QC, filtros, scores, validacao, machine learning, TMB, clonalidade, drivers e figuras.</desc>
+  <defs>
+    <style>
+      .canvas { fill: #f7f9fb; }
+      .title { font: 700 38px Arial, Helvetica, sans-serif; fill: #172033; }
+      .subtitle { font: 400 20px Arial, Helvetica, sans-serif; fill: #42526b; }
+      .section { font: 700 18px Arial, Helvetica, sans-serif; fill: #394960; letter-spacing: .5px; }
+      .box-title { font: 700 20px Arial, Helvetica, sans-serif; fill: #172033; }
+      .box-text { font: 400 16px Arial, Helvetica, sans-serif; fill: #2e3b4e; }
+      .small { font: 400 14px Arial, Helvetica, sans-serif; fill: #53657d; }
+      .note { font: 700 15px Arial, Helvetica, sans-serif; fill: #6b4b00; }
+      .arrow { stroke: #5d6f86; stroke-width: 3; fill: none; marker-end: url(#arrowhead); }
+      .arrow-soft { stroke: #8fa1b6; stroke-width: 2.5; fill: none; marker-end: url(#arrowhead-soft); stroke-dasharray: 7 8; }
+      .group { fill: #ffffff; stroke: #d8e1ec; stroke-width: 2; rx: 16; }
+      .box { stroke-width: 2.2; rx: 14; }
+      .input { fill: #e8f4ff; stroke: #4b8fd8; }
+      .process { fill: #eef8f0; stroke: #4f9b68; }
+      .score { fill: #fff5df; stroke: #d99528; }
+      .validation { fill: #f3edff; stroke: #8d6bd1; }
+      .decision { fill: #ffecec; stroke: #d96262; }
+      .output { fill: #edf7f8; stroke: #3f9ca6; }
+      .ml { fill: #f1f3f6; stroke: #6f7f91; }
+    </style>
+    <marker id="arrowhead" markerWidth="12" markerHeight="10" refX="10" refY="5" orient="auto">
+      <path d="M 0 0 L 12 5 L 0 10 z" fill="#5d6f86"/>
+    </marker>
+    <marker id="arrowhead-soft" markerWidth="12" markerHeight="10" refX="10" refY="5" orient="auto">
+      <path d="M 0 0 L 12 5 L 0 10 z" fill="#8fa1b6"/>
+    </marker>
+  </defs>
+
+  <rect class="canvas" x="0" y="0" width="1600" height="1450"/>
+
+  <text class="title" x="800" y="70" text-anchor="middle">Pipeline tumor-only para filtragem e interpretacao de variantes</text>
+  <text class="subtitle" x="800" y="105" text-anchor="middle">Coortes brasileiras sem normal pareado e sem panel of normals: QC, filtros, ML, TMB, drivers e clonalidade</text>
+
+  <rect class="group" x="80" y="150" width="1440" height="190"/>
+  <text class="section" x="110" y="185">ENTRADA</text>
+
+  <rect class="box input" x="150" y="210" width="360" height="95"/>
+  <text class="box-title" x="330" y="242" text-anchor="middle">Tabela de variantes</text>
+  <text class="box-text" x="330" y="270" text-anchor="middle">Mutect2 / DRAGEN / VEP</text>
+  <text class="small" x="330" y="294" text-anchor="middle">CHROM, POS, REF, ALT, gene, AF, DP</text>
+
+  <rect class="box input" x="620" y="210" width="360" height="95"/>
+  <text class="box-title" x="800" y="242" text-anchor="middle">Metadados das amostras</text>
+  <text class="box-text" x="800" y="270" text-anchor="middle">tipo tumoral, ensaio, pureza</text>
+  <text class="small" x="800" y="294" text-anchor="middle">WGS / WES / painel</text>
+
+  <rect class="box input" x="1090" y="210" width="360" height="95"/>
+  <text class="box-title" x="1270" y="242" text-anchor="middle">Recursos externos</text>
+  <text class="box-text" x="1270" y="270" text-anchor="middle">populacionais, OncoKB, COSMIC</text>
+  <text class="small" x="1270" y="294" text-anchor="middle">drivers, hotspots, preditores</text>
+
+  <rect class="group" x="80" y="380" width="1440" height="475"/>
+  <text class="section" x="110" y="415">PROCESSAMENTO E FILTRAGEM</text>
+
+  <rect class="box process" x="150" y="450" width="360" height="95"/>
+  <text class="box-title" x="330" y="480" text-anchor="middle">Padronizacao</text>
+  <text class="box-text" x="330" y="508" text-anchor="middle">renomeia colunas e cria IDs</text>
+  <text class="small" x="330" y="532" text-anchor="middle">sample_id, variant_id, locus_id</text>
+
+  <rect class="box process" x="620" y="450" width="360" height="95"/>
+  <text class="box-title" x="800" y="480" text-anchor="middle">Features tecnicas</text>
+  <text class="box-text" x="800" y="508" text-anchor="middle">DP, alt_count, ref_count, VAF</text>
+  <text class="small" x="800" y="532" text-anchor="middle">TLOD, MBQ, MMQ, STRANDQ, POPAF</text>
+
+  <rect class="box process" x="1090" y="450" width="360" height="95"/>
+  <text class="box-title" x="1270" y="480" text-anchor="middle">QC e hard filters</text>
+  <text class="box-text" x="1270" y="508" text-anchor="middle">limiares adaptativos por ensaio</text>
+  <text class="small" x="1270" y="532" text-anchor="middle">profundidade, VAF, suporte, qualidade</text>
+
+  <rect class="box process" x="150" y="620" width="360" height="95"/>
+  <text class="box-title" x="330" y="650" text-anchor="middle">Recorrencia interna</text>
+  <text class="box-text" x="330" y="678" text-anchor="middle">pseudo-panel of normals</text>
+  <text class="small" x="330" y="702" text-anchor="middle">pan-coorte e por tipo tumoral</text>
+
+  <rect class="box score" x="620" y="620" width="360" height="95"/>
+  <text class="box-title" x="800" y="650" text-anchor="middle">Scores integrados</text>
+  <text class="box-text" x="800" y="678" text-anchor="middle">somatico, germinativo, artefato</text>
+  <text class="small" x="800" y="702" text-anchor="middle">usa AF populacional e metricas tecnicas</text>
+
+  <rect class="box validation" x="1090" y="620" width="360" height="95"/>
+  <text class="box-title" x="1270" y="650" text-anchor="middle">Validacao externa</text>
+  <text class="box-text" x="1270" y="678" text-anchor="middle">OncoKB / COSMIC / hotspots</text>
+  <text class="small" x="1270" y="702" text-anchor="middle">prioriza, mas nao substitui QC</text>
+
+  <rect class="box decision" x="500" y="765" width="600" height="60"/>
+  <text class="box-title" x="800" y="790" text-anchor="middle">Classificacao final tumor-only</text>
+  <text class="small" x="800" y="813" text-anchor="middle">high_confidence_somatic | probable_somatic | uncertain | probable_germline | probable_artifact | hard_filter_fail</text>
+
+  <path class="arrow" d="M510 258 H620"/>
+  <path class="arrow" d="M980 258 H1090"/>
+  <path class="arrow" d="M330 305 V450"/>
+  <path class="arrow-soft" d="M800 305 V450"/>
+  <path class="arrow-soft" d="M1270 305 V620"/>
+  <path class="arrow" d="M510 498 H620"/>
+  <path class="arrow" d="M980 498 H1090"/>
+  <path class="arrow" d="M1270 545 C1270 585 1140 590 980 655"/>
+  <path class="arrow" d="M330 545 V620"/>
+  <path class="arrow" d="M510 668 H620"/>
+  <path class="arrow" d="M980 668 H1090"/>
+  <path class="arrow" d="M800 715 V765"/>
+
+  <rect class="group" x="80" y="895" width="1440" height="360"/>
+  <text class="section" x="110" y="930">ANALISES POS-FILTRAGEM</text>
+
+  <rect class="box ml" x="120" y="970" width="300" height="105"/>
+  <text class="box-title" x="270" y="1002" text-anchor="middle">ML semi-supervisionado</text>
+  <text class="box-text" x="270" y="1030" text-anchor="middle">pseudo-rotulos TP/FP</text>
+  <text class="small" x="270" y="1054" text-anchor="middle">probabilidade de verdadeiro positivo</text>
+
+  <rect class="box validation" x="480" y="970" width="300" height="105"/>
+  <text class="box-title" x="630" y="1002" text-anchor="middle">Driver vs passenger</text>
+  <text class="box-text" x="630" y="1030" text-anchor="middle">genes drivers, hotspots</text>
+  <text class="small" x="630" y="1054" text-anchor="middle">dNdScv e CHASMplus inputs</text>
+
+  <rect class="box output" x="840" y="970" width="300" height="105"/>
+  <text class="box-title" x="990" y="1002" text-anchor="middle">TMB</text>
+  <text class="box-text" x="990" y="1030" text-anchor="middle">variantes somaticas contaveis</text>
+  <text class="small" x="990" y="1054" text-anchor="middle">usa callable_mb do ensaio</text>
+
+  <rect class="box output" x="1200" y="970" width="300" height="105"/>
+  <text class="box-title" x="1350" y="1002" text-anchor="middle">Clonalidade</text>
+  <text class="box-text" x="1350" y="1030" text-anchor="middle">CCF se ha pureza/CN</text>
+  <text class="small" x="1350" y="1054" text-anchor="middle">fallback por VAF quando necessario</text>
+
+  <rect class="box output" x="300" y="1135" width="450" height="85"/>
+  <text class="box-title" x="525" y="1168" text-anchor="middle">Figuras e oncoplots</text>
+  <text class="box-text" x="525" y="1196" text-anchor="middle">maftools, QC, TMB, drivers, clonalidade</text>
+
+  <rect class="box output" x="850" y="1135" width="450" height="85"/>
+  <text class="box-title" x="1075" y="1168" text-anchor="middle">Tabelas finais</text>
+  <text class="box-text" x="1075" y="1196" text-anchor="middle">variantes filtradas, removidas e revisao manual</text>
+
+  <path class="arrow" d="M800 825 V895"/>
+  <path class="arrow" d="M800 895 C800 945 270 930 270 970"/>
+  <path class="arrow" d="M800 895 C800 945 630 930 630 970"/>
+  <path class="arrow" d="M800 895 C800 945 990 930 990 970"/>
+  <path class="arrow" d="M800 895 C800 945 1350 930 1350 970"/>
+  <path class="arrow" d="M630 1075 C630 1105 560 1105 525 1135"/>
+  <path class="arrow" d="M990 1075 C990 1105 1040 1105 1075 1135"/>
+  <path class="arrow-soft" d="M270 1075 C270 1115 385 1110 525 1135"/>
+  <path class="arrow-soft" d="M1350 1075 C1350 1115 1205 1110 1075 1135"/>
+
+  <rect class="group" x="80" y="1295" width="1440" height="95"/>
+  <text class="note" x="120" y="1330">Nota tumor-only:</text>
+  <text class="small" x="260" y="1330">o pipeline prioriza evidencia e reduz falsos positivos, mas nao substitui normal pareado, PoN compativel, revisao IGV ou validacao ortogonal.</text>
+  <text class="small" x="120" y="1362">OncoKB/COSMIC sao usados como suporte de interpretacao; variantes com baixa profundidade, artefato forte ou alta frequencia populacional continuam exigindo cautela.</text>
+</svg>

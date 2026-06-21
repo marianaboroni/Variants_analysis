@@ -1,0 +1,42 @@
+# System and IDE files
+.DS_Store
+.Rhistory
+.RData
+.Ruserdata
+.Rprofile
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# R library cache
+r_libs/
+renv.lock
+
+# Output and results directories
+results/
+output/
+logs/
+
+# Temporary and build files
+*.tar.gz
+*.zip
+*.o
+*.so
+*.a
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Data
+*.tsv.gz
+*.vcf.gz
+
+# Package-specific ignores
+/inst/doc
+/Man/*.pdf
