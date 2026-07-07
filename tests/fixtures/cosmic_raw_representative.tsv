@@ -1,0 +1,19 @@
+GENOMIC_MUTATION_ID	CHROMOSOME	GENOME_START	GENOMIC_WT_ALLELE	GENOMIC_MUT_ALLELE	COSMIC_COUNT	PRIMARY_SITE	PRIMARY_HISTOLOGY	GENE_SYMBOL
+ILLUSTR_TP53_1	17	7676154	C	T	300	ovary	serous_carcinoma	TP53
+ILLUSTR_TP53_2	17	7676154	C	T	250	breast	ductal_carcinoma	TP53
+ILLUSTR_TP53_3	17	7676154	C	T	400	lung	adenocarcinoma	TP53
+ILLUSTR_TP53_4	17	7676154	C	T	350	large_intestine	adenocarcinoma	TP53
+ILLUSTR_TP53_5	17	7676154	C	T	200	endometrium	endometrioid_carcinoma	TP53
+ILLUSTR_TP53_6	17	7676154	C	T	150	pancreas	ductal_carcinoma	TP53
+ILLUSTR_PIK3CA_1	3	179234297	A	G	180	endometrium	endometrioid_carcinoma	PIK3CA
+ILLUSTR_PIK3CA_2	3	179234297	A	G	220	breast	ductal_carcinoma	PIK3CA
+ILLUSTR_PIK3CA_3	3	179234297	A	G	60	large_intestine	adenocarcinoma	PIK3CA
+ILLUSTR_KRAS_1	12	25245350	C	T	500	large_intestine	adenocarcinoma	KRAS
+ILLUSTR_KRAS_2	12	25245350	C	T	300	lung	adenocarcinoma	KRAS
+ILLUSTR_KRAS_3	12	25245350	C	T	400	pancreas	ductal_carcinoma	KRAS
+ILLUSTR_KRAS_4	12	25245350	C	T	40	small_intestine	adenocarcinoma	KRAS
+ILLUSTR_KRAS_5	12	25245350	C	T	60	stomach	adenocarcinoma	KRAS
+ILLUSTR_BRAF_1	7	140753336	A	T	900	skin	malignant_melanoma	BRAF
+ILLUSTR_BRAF_2	7	140753336	A	T	100	thyroid	papillary_carcinoma	BRAF
+ILLUSTR_DISC_1	1	100000	G	A	80	liver	hepatocellular_carcinoma	ABCX
+ILLUSTR_NOCTX_1	2	200000	T	C	30			NOCTX

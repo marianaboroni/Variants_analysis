@@ -8,11 +8,21 @@ write_outputs <- function(
     variant_qc_summary = NULL,
     clonality_summary = NULL,
     ml_training_labels = NULL,
-    active_learning_candidates = NULL) {
+    active_learning_candidates = NULL,
+    ancestry_result = NULL) {
   outdir <- cfg$output$dir
   variants$validation_key <- make_validation_key(variants)
 
   write_tsv(variants, file.path(outdir, "variants_final.tsv"))
+  write_tsv(variants, file.path(outdir, "variants_scored.tsv"))
+  write_tsv(variants, file.path(outdir, "variants_with_features.tsv"))
+  if ("confidence_rank" %in% names(variants)) {
+    write_tsv(confidence_ranking_table(variants), file.path(outdir, "mutation_confidence_ranking.tsv"))
+    write_tsv(confidence_summary(variants), file.path(outdir, "mutation_confidence_summary.tsv"))
+  }
+
+  write_variant_subsets(variants, outdir)
+  write_recurrence_outputs(recurrence, outdir)
 
   removed <- variants[variants$final_class %in% c("likely_germline", "likely_artifact", "technical_fail", "manual_review_required"), ]
   removed$primary_reason <- as.character(removed$primary_reason)
@@ -21,6 +31,7 @@ write_outputs <- function(
 
   if (!is.null(active_learning_candidates)) {
     write_tsv(active_learning_candidates, file.path(outdir, "variants_for_review.tsv"))
+    write_tsv(active_learning_candidates, file.path(outdir, "active_learning_candidates.tsv"))
   }
 
   write_tsv(class_summary(variants), file.path(outdir, "classification_summary.tsv"))
@@ -33,19 +44,111 @@ write_outputs <- function(
   }
   if (!is.null(ml_metrics)) {
     write_tsv(ml_metrics, file.path(outdir, "ml_model_report.tsv"))
+    write_tsv(ml_metrics, file.path(outdir, "ml_filter_metrics.tsv"))
   }
   if (!is.null(variant_qc_summary)) {
     write_tsv(variant_qc_summary, file.path(outdir, "sample_variant_qc_summary.tsv"))
+    write_tsv(variant_qc_summary, file.path(outdir, "variant_call_qc_summary.tsv"))
   }
   if (!is.null(clonality_summary)) {
     write_tsv(clonality_summary, file.path(outdir, "clonality_summary.tsv"))
   }
   if (!is.null(ml_training_labels)) {
     write_tsv(ml_training_labels, file.path(outdir, "ml_training_table.tsv"))
+    write_tsv(ml_training_labels, file.path(outdir, "ml_training_labels.tsv"))
   }
+  if (!is.null(ancestry_result)) {
+    write_ancestry_outputs(ancestry_result, outdir)
+  }
+
+  write_tsv(driver_summary(variants), file.path(outdir, "driver_classification_summary.tsv"))
+  if ("somatic_oncogenicity_class" %in% names(variants) && "germline_acmg_class" %in% names(variants)) {
+    write_tsv(guideline_summary(variants), file.path(outdir, "guideline_classification_summary.tsv"))
+  }
+  write_tsv(dndscv_input_table(variants), file.path(outdir, "dndscv_input.tsv"))
+  write_tsv(chasmplus_input_table(variants), file.path(outdir, "chasmplus_missense_input.tsv"))
 
   if (isTRUE(cfg_get(cfg, c("output", "generate_filter_report"), FALSE))) {
     write_filter_report(variants, sample_qc, tmb_summary, outdir)
+  }
+}
+
+write_variant_subsets <- function(variants, outdir) {
+  write_tsv(
+    variants[variants$final_class == "high_confidence_somatic", , drop = FALSE],
+    file.path(outdir, "variants_high_confidence_somatic.tsv")
+  )
+  write_tsv(
+    variants[variants$final_class == "probable_somatic", , drop = FALSE],
+    file.path(outdir, "variants_probable_somatic.tsv")
+  )
+  write_tsv(
+    variants[variants$final_class %in% c("uncertain_tumor_only", "manual_review_required"), , drop = FALSE],
+    file.path(outdir, "variants_uncertain_for_review.tsv")
+  )
+  write_tsv(
+    variants[variants$final_class == "likely_germline", , drop = FALSE],
+    file.path(outdir, "removed_likely_germline.tsv")
+  )
+  write_tsv(
+    variants[variants$final_class == "likely_germline", , drop = FALSE],
+    file.path(outdir, "removed_probable_germline.tsv")
+  )
+  write_tsv(
+    variants[variants$final_class %in% c("likely_artifact", "technical_fail"), , drop = FALSE],
+    file.path(outdir, "removed_likely_artifact.tsv")
+  )
+  write_tsv(
+    variants[variants$final_class %in% c("likely_artifact", "technical_fail"), , drop = FALSE],
+    file.path(outdir, "removed_probable_artifact.tsv")
+  )
+  write_tsv(
+    variants[variants$driver_class %in% c("known_driver", "probable_driver", "possible_driver", "uncertain_possible_driver"), , drop = FALSE],
+    file.path(outdir, "variants_driver_candidates.tsv")
+  )
+  write_tsv(
+    variants[variants$driver_class == "likely_passenger", , drop = FALSE],
+    file.path(outdir, "variants_likely_passenger.tsv")
+  )
+}
+
+write_recurrence_outputs <- function(recurrence, outdir) {
+  if (is.null(recurrence)) return(invisible(NULL))
+  if (!is.null(recurrence$by_variant)) {
+    write_tsv(recurrence$by_variant, file.path(outdir, "cohort_recurrence_table.tsv"))
+  }
+  if (!is.null(recurrence$by_variant_tumor)) {
+    write_tsv(recurrence$by_variant_tumor, file.path(outdir, "tumor_type_recurrence_table.tsv"))
+  }
+  if (!is.null(recurrence$tumor_type_samples)) {
+    write_tsv(recurrence$tumor_type_samples, file.path(outdir, "tumor_type_sample_counts.tsv"))
+  }
+}
+
+write_ancestry_outputs <- function(ancestry_result, outdir) {
+  if (!is.null(ancestry_result$status)) {
+    write_tsv(ancestry_result$status, file.path(outdir, "ancestry_status.tsv"))
+  }
+  if (!is.null(ancestry_result$snp_set)) {
+    write_tsv(ancestry_result$snp_set, file.path(outdir, "ancestry_snp_set.tsv"))
+  }
+  if (!is.null(ancestry_result$sample_qc)) {
+    write_tsv(ancestry_result$sample_qc, file.path(outdir, "ancestry_sample_qc.tsv"))
+  }
+  if (!is.null(ancestry_result$snp_qc)) {
+    write_tsv(ancestry_result$snp_qc, file.path(outdir, "ancestry_snp_qc.tsv"))
+  }
+  if (!is.null(ancestry_result$pca_scores) && ncol(ancestry_result$pca_scores) > 0) {
+    write_tsv(ancestry_result$pca_scores, file.path(outdir, "ancestry_pca_scores.tsv"))
+  }
+  if (!is.null(ancestry_result$reference_scores) && ncol(ancestry_result$reference_scores) > 0) {
+    write_tsv(ancestry_result$reference_scores, file.path(outdir, "ancestry_reference_pca_scores.tsv"))
+  }
+  if (!is.null(ancestry_result$reference_centroids) && ncol(ancestry_result$reference_centroids) > 0) {
+    write_tsv(ancestry_result$reference_centroids, file.path(outdir, "ancestry_reference_centroids.tsv"))
+  }
+  if (!is.null(ancestry_result$assignments) && ncol(ancestry_result$assignments) > 0) {
+    write_tsv(ancestry_result$assignments, file.path(outdir, "ancestry_assignments.tsv"))
   }
 }
 
@@ -134,8 +237,8 @@ validation_summary <- function(x) {
       "oncokb_or_cosmic_matches",
       "validation_rescue_candidates",
       "validated_high_confidence_somatic",
-      "validated_probable_germline",
-      "validated_probable_artifact"
+      "validated_likely_germline",
+      "validated_likely_artifact_or_technical_fail"
     ),
     value = c(
       nrow(x),
@@ -144,8 +247,8 @@ validation_summary <- function(x) {
       sum(x$oncokb_match | x$cosmic_match, na.rm = TRUE),
       sum(x$validation_rescue_candidate, na.rm = TRUE),
       sum((x$oncokb_match | x$cosmic_match) & x$final_class == "high_confidence_somatic", na.rm = TRUE),
-      sum((x$oncokb_match | x$cosmic_match) & x$final_class == "probable_germline", na.rm = TRUE),
-      sum((x$oncokb_match | x$cosmic_match) & x$final_class == "probable_artifact", na.rm = TRUE)
+      sum((x$oncokb_match | x$cosmic_match) & x$final_class == "likely_germline", na.rm = TRUE),
+      sum((x$oncokb_match | x$cosmic_match) & x$final_class %in% c("likely_artifact", "technical_fail"), na.rm = TRUE)
     )
   )
 }

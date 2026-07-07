@@ -7,6 +7,10 @@ input:
 output:
   dir: "results/demo_tumor_only_filter"
 
+dashboard:
+  enabled: true
+  file: "variant_filtering_dashboard.html"
+
 cohort:
   cancer_type: "UCEC"
   min_samples_for_recurrence_model: 2
@@ -63,6 +67,19 @@ driver_scoring:
   possible_driver: 0.40
   min_tumor_type_samples_for_recurrence_driver: 2
 
+guideline_classification:
+  enabled: true
+  somatic:
+    benign_maf_very_strong: 0.05
+    benign_maf_strong: 0.01
+    absent_population_af: 0.00001
+    cosmic_moderate_count: 3
+    cosmic_high_count: 10
+  germline:
+    ba1_af: 0.05
+    bs1_af: 0.01
+    pm2_af: 0.00001
+
 ml_filter:
   enabled: true
   review_labels: "data/demo/review_labels.tsv"
@@ -105,6 +122,36 @@ clonality:
   min_variants_for_clustering: 3
   max_clusters_per_sample: 3
   seed: 20260621
+
+ancestry:
+  enabled: true
+  reference_genotypes: null
+  reference_delimiter: "\t"
+  require_population_af: true
+  min_population_af: 0.005
+  max_population_af: 0.99
+  min_depth: 10
+  min_alt_count: 3
+  het_vaf_min: 0.25
+  hom_alt_vaf_min: 0.80
+  include_final_classes:
+    - likely_germline
+    - manual_review_required
+    - uncertain_tumor_only
+  min_snps: 1
+  min_snps_per_sample: 1
+  min_snp_call_rate: 0.20
+  min_maf: 0.01
+  max_sample_missing_rate: 0.95
+  max_candidate_snps: 200000
+  max_snps_for_pca: 50000
+  ld_prune: true
+  ld_r2_threshold: 0.20
+  ld_window_bp: 500000
+  missing_genotype_imputation: "mean"
+  n_pcs: 10
+  assignment_pcs: 5
+  min_reference_overlap_snps: 200
 
 visualization:
   enabled: true

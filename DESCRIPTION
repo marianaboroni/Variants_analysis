@@ -1,0 +1,41 @@
+Package: tumoronly
+Title: Traceable Tumor-Only Somatic Variant Filtering and Reporting
+Version: 0.1.0
+Authors@R:
+    person("Mariana", "Boroni", email = "marianaboroni@gmail.com",
+           role = c("aut", "cre"))
+Description: A reproducible pipeline for tumor-only somatic variant analysis.
+    It reads a VEP-annotated VCF, validates the genome build, applies a
+    documented and auditable set of tumor-only filters, annotates variants
+    against a locally-prepared COSMIC database (lifted over once at build
+    time), exports a maftools-compatible MAF, and renders an explanatory
+    HTML report. OncoKB annotation is a separate, optional step that never
+    alters filtering decisions.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.2.3
+Depends:
+    R (>= 4.1)
+Imports:
+    data.table,
+    yaml,
+    jsonlite,
+    digest,
+    tools,
+    utils,
+    stats
+Suggests:
+    maftools,
+    rmarkdown,
+    knitr,
+    ggplot2,
+    testthat (>= 3.0.0),
+    GenomicRanges,
+    IRanges,
+    rtracklayer,
+    Biostrings,
+    httr2
+SystemRequirements: bcftools (optional, for VCF normalization),
+    CrossMap or UCSC liftOver (optional, for cross-build COSMIC preparation)
+Config/testthat/edition: 3

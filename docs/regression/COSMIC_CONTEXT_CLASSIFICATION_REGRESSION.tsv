@@ -1,0 +1,7 @@
+variant_key	sample_id	tumor_type	context_status	total_occurrences	matching_tumor_occurrences	old_OS4	new_OS4	old_OM4	new_OM4	old_final_class	new_final_class	old_filter_status	new_filter_status	difference_reason
+7:140753336:A:T	BRAF_HGSOC	HGSOC	other_tumor_only	1000	0	TRUE	FALSE	FALSE	FALSE	manual_review_required	manual_review_required	REVIEW	REVIEW	OS4/OM4 removed but final_class stable
+7:140753336:A:T	BRAF_MEL	MELANOMA	exact_match	1000	900	TRUE	TRUE	FALSE	FALSE	manual_review_required	manual_review_required	REVIEW	REVIEW	no change (context-matched or no COSMIC effect)
+3:179234297:A:G	PIK3CA_MEL	MELANOMA	other_tumor_only	460	0	TRUE	FALSE	FALSE	FALSE	manual_review_required	manual_review_required	REVIEW	REVIEW	OS4/OM4 removed but final_class stable
+3:179234297:A:G	PIK3CA_UCEC	UCEC	exact_match	460	180	TRUE	TRUE	FALSE	FALSE	manual_review_required	manual_review_required	REVIEW	REVIEW	no change (context-matched or no COSMIC effect)
+17:7676154:C:T	TP53_HGSOC	HGSOC	pan_cancer_with_sample_tumor	1650	300	TRUE	TRUE	FALSE	FALSE	manual_review_required	manual_review_required	REVIEW	REVIEW	no change (context-matched or no COSMIC effect)
+17:7676154:C:T	TP53_MEL	MELANOMA	pan_cancer_without_sample_tumor	1650	0	TRUE	FALSE	FALSE	FALSE	manual_review_required	manual_review_required	REVIEW	REVIEW	OS4/OM4 removed but final_class stable

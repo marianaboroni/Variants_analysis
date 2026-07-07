@@ -1,0 +1,12 @@
+input_tumor_type	input_tumor_subtype	cosmic_primary_site	cosmic_histology	match_level	mapping_version	mapping_source
+MELANOMA		skin	malignant_melanoma	exact	test.1	test
+MELANOMA		skin		compatible	test.1	test
+LUAD		lung	adenocarcinoma	exact	test.1	test
+LUAD		lung		compatible	test.1	test
+COREAD		large_intestine	adenocarcinoma	exact	test.1	test
+BRCA		breast	ductal_carcinoma	exact	test.1	test
+BRCA		breast		compatible	test.1	test
+UCEC		endometrium	endometrioid_carcinoma	exact	test.1	test
+UCEC		endometrium		compatible	test.1	test
+HGSOC		ovary	serous_carcinoma	exact	test.1	test
+HGSOC		ovary		compatible	test.1	test

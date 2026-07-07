@@ -1,8 +1,18 @@
 add_driver_layers <- function(x, cfg) {
+  x <- add_driver_annotation_layers(x, cfg)
+  x <- score_and_classify_driver_layers(x, cfg)
+  x
+}
+
+add_driver_annotation_layers <- function(x, cfg) {
   x <- add_validation_keys(x)
   x <- attach_driver_gene_reference(x, cfg)
   x <- attach_hotspot_reference(x, cfg)
   x <- add_functional_predictor_features(x)
+  x
+}
+
+score_and_classify_driver_layers <- function(x, cfg) {
   x <- score_driver_evidence(x, cfg)
   x <- classify_driver_status(x, cfg)
   x
@@ -102,11 +112,11 @@ standardize_hotspot_reference <- function(ref) {
 
 collapse_driver_gene_reference <- function(ref, key_col) {
   keep <- ref[!is_missing_value(ref[[key_col]]), c(key_col, "role", "source", "confidence"), drop = FALSE]
-  aggregate(
+  stats::aggregate(
     keep[c("role", "source", "confidence")],
     by = list(lookup_key = keep[[key_col]]),
     FUN = function(z) {
-      z <- unique(na.omit(as.character(z)))
+      z <- unique(stats::na.omit(as.character(z)))
       if (length(z) == 0) NA_character_ else paste(z[1:min(length(z), 5)], collapse = ";")
     }
   ) |>
@@ -189,11 +199,12 @@ predictor_threshold_score <- function(x, low, high) {
 }
 
 score_driver_evidence <- function(x, cfg) {
-  x$oncokb_driver_score <- oncokb_driver_score(x)
+  # OncoKB intentionally excluded from driver evidence (post-hoc annotation only,
+  # see R/oncokb.R and docs/REFACTOR_AUDIT.md RISK-1). Driver evidence is derived
+  # from COSMIC recurrence and cancer-hotspot support.
   x$cosmic_driver_score <- cosmic_driver_score(x)
   x$hotspot_driver_score <- ifelse(x$hotspot_match, ifelse(x$hotspot_tumor_specific, 1, 0.85), 0)
   x$variant_driver_evidence_score <- pmax(
-    x$oncokb_driver_score,
     x$cosmic_driver_score,
     x$hotspot_driver_score,
     na.rm = TRUE
@@ -208,28 +219,24 @@ score_driver_evidence <- function(x, cfg) {
   x$driver_score <- bounded01(
     0.40 * zero_if_na(x$variant_driver_evidence_score) +
       0.20 * zero_if_na(x$gene_driver_score) +
-      0.20 * zero_if_na(x$functional_impact_score) +
+      0.15 * zero_if_na(x$functional_impact_score) +
       0.10 * zero_if_na(x$mechanism_compatibility_score) +
-      0.10 * zero_if_na(x$cohort_driver_signal_score) -
+      0.10 * zero_if_na(x$cohort_driver_signal_score) +
+      0.05 * zero_if_na(somatic_oncogenicity_driver_component(x)) -
       zero_if_na(x$driver_penalty)
   )
   x$driver_evidence <- driver_evidence_text(x)
   x
 }
 
+somatic_oncogenicity_driver_component <- function(x) {
+  if (!"somatic_oncogenicity_score" %in% names(x)) return(rep(0, nrow(x)))
+  bounded01((x$somatic_oncogenicity_score + 1) / 11)
+}
+
 zero_if_na <- function(x) {
   x[is.na(x)] <- 0
   x
-}
-
-oncokb_driver_score <- function(x) {
-  onc <- toupper(as.character(x$oncokb_oncogenic))
-  score <- rep(0, nrow(x))
-  score[grepl("ONCOGENIC", onc)] <- 1
-  score[grepl("LIKELY ONCOGENIC", onc)] <- 0.9
-  score[grepl("RESISTANCE", onc)] <- pmax(score[grepl("RESISTANCE", onc)], 0.85)
-  score[x$oncokb_match & score == 0] <- 0.45
-  score
 }
 
 cosmic_driver_score <- function(x) {
@@ -257,7 +264,7 @@ mechanism_compatibility_score <- function(x) {
   oncogene <- grepl("oncogene|activa|gain|gof", role)
   tsg <- grepl("tumou?r suppressor|suppressor|loss|lof|inactiv", role)
   both <- grepl("both|dual", role)
-  hotspot_like <- x$hotspot_match | x$oncokb_driver_score >= 0.85 |
+  hotspot_like <- x$hotspot_match |
     (!is.na(x$cosmic_count) & x$cosmic_count >= 10)
 
   score <- rep(0, nrow(x))
@@ -278,15 +285,18 @@ cohort_driver_signal_score <- function(x, cfg) {
   score <- rep(0, nrow(x))
   enough <- !is.na(tumor_n) & tumor_n >= min_samples
   score[enough & !is.na(tumor_freq) & tumor_freq >= 0.05 & x$gene_driver_match] <- 0.45
-  score[enough & !is.na(tumor_freq) & tumor_freq >= 0.10 & (x$hotspot_match | x$oncokb_driver_score >= 0.85)] <- 0.75
+  score[enough & !is.na(tumor_freq) & tumor_freq >= 0.10 & x$hotspot_match] <- 0.75
   score[!is.na(cohort_freq) & cohort_freq >= 0.20 & !x$gene_driver_match & !x$hotspot_match] <- 0
   score
 }
 
 driver_penalty_score <- function(x) {
   penalty <- rep(0, nrow(x))
-  penalty[x$final_class %in% c("hard_filter_fail", "probable_artifact", "probable_germline")] <- 0.70
-  penalty[x$final_class %in% c("uncertain")] <- 0.20
+  penalty[x$final_class %in% c(
+    "hard_filter_fail", "probable_artifact", "probable_germline",
+    "technical_fail", "likely_artifact", "likely_germline"
+  )] <- 0.70
+  penalty[x$final_class %in% c("uncertain", "uncertain_tumor_only", "manual_review_required")] <- 0.20
   penalty[!is.na(x$max_pop_af) & x$max_pop_af >= 0.005] <- pmax(
     penalty[!is.na(x$max_pop_af) & x$max_pop_af >= 0.005],
     0.50
@@ -309,11 +319,12 @@ classify_driver_status <- function(x, cfg) {
   x$driver_class[somatic_ok &
                    x$driver_score >= probable_cutoff &
                    x$variant_driver_evidence_score >= 0.85 &
-                   (x$hotspot_match | x$oncokb_driver_score >= 0.85)] <- "known_driver"
+                   x$hotspot_match] <- "known_driver"
   x$driver_class[somatic_ok &
                    x$driver_score >= known_cutoff &
                    x$variant_driver_evidence_score >= 0.85] <- "known_driver"
-  x$driver_class[x$final_class == "uncertain" & x$driver_score >= probable_cutoff] <- "uncertain_possible_driver"
+  x$driver_class[x$final_class %in% c("uncertain", "uncertain_tumor_only", "manual_review_required") &
+                   x$driver_score >= probable_cutoff] <- "uncertain_possible_driver"
   x
 }
 
@@ -323,7 +334,6 @@ driver_evidence_text <- function(x) {
     idx <- !is.na(flag) & flag
     out[idx] <<- ifelse(out[idx] == "", label, paste(out[idx], label, sep = ";"))
   }
-  add(x$oncokb_driver_score >= 0.85, "OncoKB_oncogenic")
   add(x$cosmic_driver_score >= 0.75, "COSMIC_recurrent")
   add(x$hotspot_match, "hotspot_reference")
   add(x$gene_driver_tumor_specific, "tumor_type_driver_gene")
@@ -332,6 +342,7 @@ driver_evidence_text <- function(x) {
   add(x$functional_impact_score >= 0.70, "strong_functional_prediction")
   add(x$is_splice_disruptive, "splice_disruptive")
   add(x$structural_hotspot, "structural_functional_region")
+  add("somatic_oncogenicity_class" %in% names(x) & x$somatic_oncogenicity_class %in% c("Oncogenic", "Likely Oncogenic"), "ClinGen_CGC_VICC_oncogenicity_support")
   add(!is.na(x$max_pop_af) & x$max_pop_af >= 0.005, "population_AF_penalty")
   out[out == ""] <- "no_driver_evidence"
   out

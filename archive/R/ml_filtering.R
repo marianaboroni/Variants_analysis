@@ -171,7 +171,10 @@ make_pseudo_labels <- function(x, cfg) {
     x$hard_filter_pass &
     x$germline_score < 0.45 &
     x$artifact_score < 0.45
-  probable_fp <- x$final_class %in% c("hard_filter_fail", "probable_artifact", "probable_germline") &
+  probable_fp <- x$final_class %in% c(
+    "hard_filter_fail", "probable_artifact", "probable_germline",
+    "technical_fail", "likely_artifact", "likely_germline"
+  ) &
     (x$artifact_score >= 0.70 | x$germline_score >= 0.70 | !is.na(x$max_pop_af) & x$max_pop_af >= 0.005)
 
   label[high_somatic & (strong_validated | x$somatic_score_validated >= 0.85)] <- "true_positive"
@@ -396,6 +399,7 @@ build_ml_feature_matrix <- function(x) {
     "germline_score", "artifact_score", "somatic_score_validated",
     "functional_impact_score", "driver_score", "spliceai_max_score",
     "alphamissense_score", "revel_score", "cadd_phred", "meta_predictor_score",
+    "somatic_oncogenicity_score", "germline_acmg_points",
     "ccf_estimate", "clonality_cluster_center"
   )
   feature_cols <- feature_cols[feature_cols %in% names(x)]
@@ -505,7 +509,10 @@ build_active_learning_candidates <- function(x, cfg) {
   uncertainty[has_prob] <- 1 - pmin(abs(prob[has_prob] - cutoff) / max(cutoff, 1 - cutoff), 1)
 
   somatic_by_rules <- x$final_class %in% c("high_confidence_somatic", "probable_somatic")
-  nonsomatic_by_rules <- x$final_class %in% c("probable_germline", "probable_artifact", "hard_filter_fail")
+  nonsomatic_by_rules <- x$final_class %in% c(
+    "probable_germline", "probable_artifact", "hard_filter_fail",
+    "likely_germline", "likely_artifact", "technical_fail"
+  )
   ml_somatic <- has_prob & prob >= cutoff
   discordance <- (somatic_by_rules & has_prob & !ml_somatic) | (nonsomatic_by_rules & ml_somatic)
 
@@ -521,11 +528,12 @@ build_active_learning_candidates <- function(x, cfg) {
     !is.na(x$variant_cohort_freq) & x$variant_cohort_freq >= cfg_get(cfg, c("active_learning", "recurrent_variant_fraction"), 0.05) &
     !safe_logical_column(x, "oncokb_match") & !safe_logical_column(x, "cosmic_match")
   population_conflict <- somatic_by_rules & !is.na(x$max_pop_af) & x$max_pop_af >= cfg_get(cfg, c("population_filters", "rare_af"), 0.001)
-  high_impact_uncertain <- x$final_class == "uncertain" & zero_if_na(x$impact_rank) >= 2
+  uncertain_by_rules <- x$final_class %in% c("uncertain_tumor_only", "manual_review_required", "uncertain")
+  high_impact_uncertain <- uncertain_by_rules & zero_if_na(x$impact_rank) >= 2
 
   priority <- 0.35 * uncertainty +
     0.25 * as.numeric(discordance) +
-    0.15 * as.numeric(x$final_class == "uncertain") +
+    0.15 * as.numeric(uncertain_by_rules) +
     0.10 * as.numeric(validation_rescue) +
     0.10 * as.numeric(driver_interest) +
     0.10 * as.numeric(recurrent_unvalidated) +
@@ -541,7 +549,7 @@ build_active_learning_candidates <- function(x, cfg) {
   reasons <- active_learning_reasons(
     uncertainty >= cfg_get(cfg, c("active_learning", "uncertainty_score_min"), 0.70),
     discordance,
-    x$final_class == "uncertain",
+    uncertain_by_rules,
     validation_rescue,
     driver_interest,
     recurrent_unvalidated,

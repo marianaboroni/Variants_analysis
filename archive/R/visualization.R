@@ -11,7 +11,7 @@ make_visualization_outputs <- function(
 
   manifest <- empty_figure_manifest()
   if (!enabled) {
-    manifest <- add_figure_manifest(manifest, NA_character_, "visualization", "skipped", "visualization.enabled is false")
+    manifest <- add_figure_manifest(manifest, NA_character_, "visualization", "visualization", "skipped", "visualization.enabled is false")
     return(manifest)
   }
 
@@ -30,7 +30,9 @@ make_visualization_outputs <- function(
 
   manifest <- run_maftools_plots(maf_path, maf_table, cfg, outdir, manifest)
   manifest <- run_fallback_oncoplot(maf_table, cfg, outdir, manifest)
+  manifest <- run_confidence_oncoplot(variants, cfg, outdir, manifest)
   manifest <- plot_variant_class_stack(variants, cfg, outdir, manifest)
+  manifest <- plot_confidence_outputs(variants, cfg, outdir, manifest)
   manifest <- plot_tmb_bar(tmb_summary, cfg, outdir, manifest)
   manifest <- plot_driver_summary(variants, cfg, outdir, manifest)
   manifest <- plot_qc_depth_vaf(variants, cfg, outdir, manifest)
@@ -239,6 +241,122 @@ run_fallback_oncoplot <- function(maf_table, cfg, outdir, manifest) {
   save_ggplot_pair(p, path_png, path_pdf, width = 12, height = 7)
   manifest <- add_figure_manifest(manifest, path_png, "oncoplot_fallback_png", "oncoplot", "written", paste("top", length(top_genes), "genes"))
   add_figure_manifest(manifest, path_pdf, "oncoplot_fallback_pdf", "oncoplot", "written", paste("top", length(top_genes), "genes"))
+}
+
+run_confidence_oncoplot <- function(variants, cfg, outdir, manifest) {
+  if (!requireNamespace("ggplot2", quietly = TRUE)) {
+    return(add_figure_manifest(manifest, NA_character_, "confidence_oncoplot", "oncoplot", "skipped", "R package ggplot2 is not installed"))
+  }
+  required <- c("gene", "sample_id", "confidence_bucket")
+  if (!all(required %in% names(variants))) {
+    return(add_figure_manifest(manifest, NA_character_, "confidence_oncoplot", "oncoplot", "skipped", "missing confidence ranking columns"))
+  }
+  dt <- data.table::as.data.table(variants)
+  keep_actions <- c("keep_somatic_candidate", "manual_review")
+  if ("recommended_variant_action" %in% names(dt)) {
+    dt <- dt[recommended_variant_action %in% keep_actions]
+  }
+  dt <- dt[!is.na(gene) & gene != "" & !is.na(sample_id)]
+  if (nrow(dt) == 0) {
+    return(add_figure_manifest(manifest, NA_character_, "confidence_oncoplot", "oncoplot", "skipped", "no ranked variants for confidence oncoplot"))
+  }
+
+  top_n <- cfg_get(cfg, c("visualization", "oncoplot_top_genes"), 20)
+  gene_counts <- dt[, .N, by = gene][order(-N)]
+  top_genes <- gene_counts$gene[seq_len(min(top_n, nrow(gene_counts)))]
+  plot_dt <- dt[gene %in% top_genes]
+  plot_dt[, bucket_priority := confidence_bucket_priority(confidence_bucket)]
+  plot_dt <- plot_dt[order(bucket_priority), .(
+    confidence_bucket = confidence_bucket[1],
+    best_somatic_confidence = max(somatic_confidence_score, na.rm = TRUE),
+    n_hits = .N
+  ), by = .(sample_id, gene)]
+  plot_dt$best_somatic_confidence[is.infinite(plot_dt$best_somatic_confidence) | is.na(plot_dt$best_somatic_confidence)] <- 0
+
+  sample_order <- dt[, .N, by = sample_id][order(-N)]$sample_id
+  gene_order <- rev(top_genes)
+  plot_dt$sample_id <- factor(plot_dt$sample_id, levels = sample_order)
+  plot_dt$gene <- factor(plot_dt$gene, levels = gene_order)
+
+  p <- ggplot2::ggplot(plot_dt, ggplot2::aes(x = sample_id, y = gene)) +
+    ggplot2::geom_tile(ggplot2::aes(fill = confidence_bucket), color = "white", size = 0.25) +
+    ggplot2::geom_point(ggplot2::aes(size = best_somatic_confidence), shape = 21, color = "black", fill = "white", alpha = 0.70) +
+    ggplot2::scale_size_continuous(range = c(1.5, 4), limits = c(0, 1)) +
+    ggplot2::labs(x = "Sample", y = "Gene", fill = "Confidence bucket", size = "Somatic confidence") +
+    ggplot2::theme_minimal(base_size = 10) +
+    ggplot2::theme(
+      axis.text.x = ggplot2::element_text(angle = 90, hjust = 1, vjust = 0.5),
+      panel.grid = ggplot2::element_blank()
+    )
+
+  path_png <- file.path(outdir, "oncoplot_confidence_buckets.png")
+  path_pdf <- file.path(outdir, "oncoplot_confidence_buckets.pdf")
+  save_ggplot_pair(p, path_png, path_pdf, width = 12, height = 7)
+  manifest <- add_figure_manifest(manifest, path_png, "confidence_oncoplot_png", "oncoplot", "written", paste("top", length(top_genes), "genes"))
+  add_figure_manifest(manifest, path_pdf, "confidence_oncoplot_pdf", "oncoplot", "written", paste("top", length(top_genes), "genes"))
+}
+
+confidence_bucket_priority <- function(x) {
+  priority <- c(
+    likely_somatic_high_confidence = 1,
+    likely_somatic_moderate_confidence = 2,
+    possible_pathogenic_germline_review = 3,
+    manual_review_priority = 4,
+    likely_germline_check = 5,
+    likely_polymorphism_remove = 6,
+    likely_artifact_remove = 7,
+    manual_review = 8
+  )
+  out <- priority[as.character(x)]
+  out[is.na(out)] <- 99
+  as.numeric(out)
+}
+
+plot_confidence_outputs <- function(variants, cfg, outdir, manifest) {
+  if (!requireNamespace("ggplot2", quietly = TRUE)) {
+    return(add_figure_manifest(manifest, NA_character_, "confidence_outputs", "confidence", "skipped", "R package ggplot2 is not installed"))
+  }
+  if (!all(c("recommended_variant_action", "confidence_bucket") %in% names(variants))) {
+    return(add_figure_manifest(manifest, NA_character_, "confidence_outputs", "confidence", "skipped", "missing confidence ranking columns"))
+  }
+  dt <- data.table::as.data.table(variants)
+
+  count_dt <- dt[, .N, by = .(recommended_variant_action, confidence_bucket)]
+  p_counts <- ggplot2::ggplot(count_dt, ggplot2::aes(x = recommended_variant_action, y = N, fill = confidence_bucket)) +
+    ggplot2::geom_col(width = 0.85) +
+    ggplot2::scale_y_log10() +
+    ggplot2::labs(x = "Recommended action", y = "Variant count (log10)", fill = "Confidence bucket") +
+    ggplot2::theme_minimal(base_size = 10) +
+    ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 30, hjust = 1))
+
+  count_png <- file.path(outdir, "confidence_bucket_counts.png")
+  count_pdf <- file.path(outdir, "confidence_bucket_counts.pdf")
+  save_ggplot_pair(p_counts, count_png, count_pdf, width = 10, height = 6)
+  manifest <- add_figure_manifest(manifest, count_png, "confidence_bucket_counts_png", "confidence", "written", "")
+  manifest <- add_figure_manifest(manifest, count_pdf, "confidence_bucket_counts_pdf", "confidence", "written", "")
+
+  plot_dt <- data.table::as.data.table(sample_variants_for_plot(as.data.frame(dt), cfg))
+  score_cols <- c("somatic_confidence_score", "germline_confidence_score", "polymorphism_confidence_score", "artifact_confidence_score")
+  if (all(score_cols %in% names(plot_dt))) {
+    long <- data.table::melt(
+      plot_dt,
+      measure.vars = score_cols,
+      variable.name = "score_type",
+      value.name = "score"
+    )
+    p_scores <- ggplot2::ggplot(long, ggplot2::aes(x = score, fill = score_type)) +
+      ggplot2::geom_histogram(bins = 40, alpha = 0.65, position = "identity") +
+      ggplot2::coord_cartesian(xlim = c(0, 1)) +
+      ggplot2::labs(x = "Confidence score", y = "Variant count", fill = "Score") +
+      ggplot2::theme_minimal(base_size = 10)
+
+    score_png <- file.path(outdir, "confidence_score_distributions.png")
+    score_pdf <- file.path(outdir, "confidence_score_distributions.pdf")
+    save_ggplot_pair(p_scores, score_png, score_pdf, width = 10, height = 6)
+    manifest <- add_figure_manifest(manifest, score_png, "confidence_score_distributions_png", "confidence", "written", "")
+    manifest <- add_figure_manifest(manifest, score_pdf, "confidence_score_distributions_pdf", "confidence", "written", "")
+  }
+  manifest
 }
 
 maf_class_priority <- function(x) {
@@ -455,7 +573,7 @@ plot_clonality_outputs <- function(variants, clonality_summary, cfg, outdir, man
   if (!is.null(clonality_summary) && nrow(clonality_summary) > 0) {
     path <- file.path(outdir, "clonality_summary_for_figures.tsv")
     write_tsv(clonality_summary, path)
-    manifest <- add_figure_manifest(manifest, path, "clonality_summary_copy", "written", "")
+    manifest <- add_figure_manifest(manifest, path, "clonality_summary_copy", "clonality", "written", "")
   }
   manifest
 }

@@ -1,69 +1,7 @@
-add_validation_layers <- function(x, cfg) {
-  x <- add_validation_keys(x)
-  x$validation_key <- make_validation_key(x)
-  x$oncokb_match <- FALSE
-  x$oncokb_oncogenic <- NA_character_
-  x$oncokb_highest_level <- NA_character_
-  x$cosmic_match <- FALSE
-  x$cosmic_id <- NA_character_
-  x$cosmic_count <- NA_real_
-
-  if (!is.null(cfg$validation$oncokb) && !is.na(cfg$validation$oncokb)) {
-    okb <- read_variants(cfg$validation$oncokb, "\t")
-    x <- add_oncokb(x, okb)
-  }
-  if (!is.null(cfg$validation$cosmic) && !is.na(cfg$validation$cosmic)) {
-    cosmic <- read_variants(cfg$validation$cosmic, "\t")
-    x <- add_cosmic(x, cosmic)
-  }
-
-  x$validation_support_score <- validation_support_score(x)
-  x
-}
-
-add_oncokb <- function(x, okb) {
-  okb <- standardize_validation_table(okb)
-  okb$oncokb_oncogenic_src <- as.character(coalesce_columns(okb, c("ONCOGENIC", "Oncogenic")))
-  okb$oncokb_highest_level_src <- as.character(coalesce_columns(
-    okb,
-    c("HIGHEST_LEVEL", "Highest_Level", "LEVEL_1", "LEVEL_2", "LEVEL_3A", "LEVEL_3B", "LEVEL_4")
-  ))
-
-  match <- prioritized_reference_lookup(
-    x,
-    okb,
-    value_cols = c("oncokb_oncogenic_src", "oncokb_highest_level_src"),
-    prefixes = c("sample_coord", "sample_gene_protein", "tumor_coord", "tumor_gene_protein", "coord", "gene_protein")
-  )
-
-  hit <- !is.na(match$oncokb_oncogenic_src) | !is.na(match$oncokb_highest_level_src)
-  x$oncokb_match <- hit
-  x$oncokb_oncogenic <- match$oncokb_oncogenic_src
-  x$oncokb_highest_level <- match$oncokb_highest_level_src
-  x$oncokb_match_scope <- match$match_scope
-  x
-}
-
-add_cosmic <- function(x, cosmic) {
-  cosmic <- standardize_validation_table(cosmic)
-  cosmic$cosmic_id_src <- as.character(coalesce_columns(
-    cosmic,
-    c("COSMIC_ID", "COSMIC_MUTATION_ID", "LEGACY_MUTATION_ID", "Existing_variation")
-  ))
-  cosmic$cosmic_count_src <- to_numeric_safe(coalesce_columns(cosmic, c("COSMIC_COUNT", "CNT", "Count")))
-
-  match <- prioritized_reference_lookup(
-    x,
-    cosmic,
-    value_cols = c("cosmic_id_src", "cosmic_count_src"),
-    prefixes = c("sample_coord", "sample_gene_protein", "tumor_coord", "tumor_gene_protein", "coord", "gene_protein")
-  )
-  x$cosmic_match <- !is.na(match$cosmic_id_src) | !is.na(match$cosmic_count_src)
-  x$cosmic_id <- match$cosmic_id_src
-  x$cosmic_count <- to_numeric_safe(match$cosmic_count_src)
-  x$cosmic_match_scope <- match$match_scope
-  x
-}
+# Reference-key machinery used for DRIVER-GENE and CANCER-HOTSPOT matching
+# (gene / tumor-type / protein keys). COSMIC and OncoKB matching were removed
+# from this file: COSMIC now uses the canonical genomic key (R/cosmic_match.R)
+# and OncoKB is a post-hoc step (R/oncokb.R). See docs/REFACTOR_AUDIT.md.
 
 standardize_validation_table <- function(x) {
   x$sample_id <- as.character(coalesce_columns(
@@ -153,27 +91,14 @@ prioritized_reference_lookup <- function(x, ref, value_cols, prefixes) {
 collapse_reference_by_key <- function(ref, key_col, value_cols) {
   keep <- ref[!is_missing_value(ref[[key_col]]), c(key_col, value_cols), drop = FALSE]
   if (nrow(keep) == 0) return(keep)
-  agg <- aggregate(
+  agg <- stats::aggregate(
     keep[value_cols],
     by = list(lookup_key = keep[[key_col]]),
     FUN = function(z) {
-      z <- unique(na.omit(as.character(z)))
+      z <- unique(stats::na.omit(as.character(z)))
       if (length(z) == 0) NA_character_ else paste(z[1:min(length(z), 5)], collapse = ";")
     }
   )
   names(agg)[names(agg) == "lookup_key"] <- key_col
   agg
-}
-
-validation_support_score <- function(x) {
-  okb <- rep(0, nrow(x))
-  onc <- toupper(as.character(x$oncokb_oncogenic))
-  okb[grepl("ONCOGENIC|LIKELY", onc)] <- 1
-  okb[x$oncokb_match & okb == 0] <- 0.5
-
-  cosmic <- rep(0, nrow(x))
-  cosmic[x$cosmic_match] <- 0.4
-  cosmic[!is.na(x$cosmic_count) & x$cosmic_count >= 3] <- 0.7
-  cosmic[!is.na(x$cosmic_count) & x$cosmic_count >= 10] <- 0.9
-  pmax(okb, cosmic)
 }

@@ -19,6 +19,11 @@ results/
 output/
 logs/
 
+# Processed reference databases and API caches (never version these)
+db/
+.oncokb_cache/
+*_cache/
+
 # Temporary and build files
 *.tar.gz
 *.zip
@@ -36,6 +41,9 @@ __pycache__/
 # Data
 *.tsv.gz
 *.vcf.gz
+*.tbi
+*.bam
+*.bai
 
 # Package-specific ignores
 /inst/doc

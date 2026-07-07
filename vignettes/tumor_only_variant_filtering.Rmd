@@ -77,11 +77,12 @@ knitr::include_graphics(
 | Internal recurrence model | Pan-cohort and tumor-type recurrence features |
 | Somatic/germline/artifact scoring | `somatic_score`, `germline_score`, `artifact_score` |
 | OncoKB/COSMIC validation layer | External validation and rescue flags |
+| Guideline-inspired evidence | Somatic oncogenicity and germline ACMG/AMP support codes |
 | Final classification | `final_class` |
 | Driver/passenger scoring | `driver_class`, dNdScv and CHASMplus input tables |
 | ML filter | `ml_true_positive_probability` and model status |
-| TMB and clonality | Per-sample summaries |
-| Visualization | MAF, oncoplots, QC, TMB, driver and clonality figures |
+| TMB, clonality and ancestry | Per-sample summaries and SNP-based ancestry QC/PCA |
+| Visualization | MAF, oncoplots, QC, TMB, driver, clonality and ancestry figures |
 
 # Installation and dependencies
 
@@ -234,11 +235,15 @@ The most important files are:
 
 | File | Meaning |
 |---|---|
-| `variants_scored.tsv` | Main per-variant output with scores, classes, ML and clonality fields. |
+| `variant_filtering_dashboard.html` | HTML dashboard summarizing QC, ranking, figures and oncoplots. |
+| `mutation_confidence_ranking.tsv` | Ranked table for somatic, germline, polymorphism/artifact and manual-review decisions. |
+| `mutation_confidence_summary.tsv` | Counts by recommended action and confidence bucket. |
+| `variants_final.tsv` | Main per-variant output with features, scores, classes, ML and clonality fields. |
+| `variants_scored.tsv` | Backward-compatible alias of the main scored table. |
 | `variants_high_confidence_somatic.tsv` | Strict subset of high-confidence tumor-only somatic candidates. |
 | `variants_uncertain_for_review.tsv` | Variants that should be reviewed manually or in IGV. |
-| `removed_probable_germline.tsv` | Variants more compatible with germline polymorphism. |
-| `removed_probable_artifact.tsv` | Variants more compatible with technical artifact. |
+| `removed_likely_germline.tsv` | Variants more compatible with germline polymorphism. |
+| `removed_likely_artifact.tsv` | Variants more compatible with technical artifact or failed technical evidence. |
 | `sample_qc_summary.tsv` | Sample-level technical QC and adaptive thresholds. |
 | `variant_call_qc_summary.tsv` | Per-sample classification counts and technical metrics. |
 | `ml_filter_metrics.tsv` | Whether pan-cancer and tumor-specific ML models trained and label counts. |
@@ -247,6 +252,7 @@ The most important files are:
 | `tmb_summary.tsv` | TMB per sample. |
 | `clonality_summary.tsv` | Approximate clonal/subclonal summary per sample. |
 | `driver_classification_summary.tsv` | Driver/passenger class counts. |
+| `guideline_classification_summary.tsv` | Summary of somatic oncogenicity and germline ACMG/AMP-inspired classes. |
 | `figure_manifest.tsv` | List of generated figures and skipped optional plots. |
 
 # Understanding `final_class`
@@ -257,10 +263,11 @@ The most important files are:
 |---|---|
 | `high_confidence_somatic` | Strong technical and somatic evidence, often with validation support. |
 | `probable_somatic` | Good tumor-only somatic candidate, but less supported than high confidence. |
-| `uncertain` | Cannot confidently classify; review manually. |
-| `probable_germline` | Compatible with germline polymorphism or population recurrence. |
-| `probable_artifact` | Compatible with technical artifact. |
-| `hard_filter_fail` | Failed required technical/sample-level filters. |
+| `uncertain_tumor_only` | Cannot confidently classify from tumor-only evidence. |
+| `manual_review_required` | Conflicting evidence or rescue candidate that should be reviewed manually. |
+| `likely_germline` | Compatible with germline polymorphism or population recurrence. |
+| `likely_artifact` | Compatible with technical artifact. |
+| `technical_fail` | Failed required technical/sample-level filters. |
 
 Read the final class together with:
 
@@ -277,7 +284,7 @@ Read the final class together with:
 Example:
 
 ```{r inspect-final-class}
-variants_file <- file.path(outdir, "variants_scored.tsv")
+variants_file <- file.path(outdir, "variants_final.tsv")
 if (file.exists(variants_file)) {
   x <- data.table::fread(variants_file)
   cols <- intersect(
@@ -287,6 +294,25 @@ if (file.exists(variants_file)) {
     names(x)
   )
   head(x[, ..cols])
+}
+```
+
+# Dashboard and confidence ranking
+
+The first output to inspect is `variant_filtering_dashboard.html`. It contains
+summary cards, ranked tables and generated figures. The ranking table separates
+three practical actions:
+
+| Action | Meaning |
+|---|---|
+| `keep_somatic_candidate` | Keep as a tumor-only somatic candidate. |
+| `remove_from_somatic_list` | Remove from the somatic list as likely polymorphism/germline or artifact. |
+| `manual_review` | Review in IGV and audit annotation/population evidence. |
+
+```{r confidence-ranking}
+ranking_file <- file.path(outdir, "mutation_confidence_ranking.tsv")
+if (file.exists(ranking_file)) {
+  head(data.table::fread(ranking_file))
 }
 ```
 
@@ -341,6 +367,27 @@ Useful columns:
 validation_file <- file.path(outdir, "oncokb_cosmic_validation_summary.tsv")
 if (file.exists(validation_file)) {
   data.table::fread(validation_file)
+}
+```
+
+# Guideline-inspired somatic and germline evidence
+
+The pipeline applies two transparent evidence layers before final
+classification:
+
+| Layer | Output columns | Intended use |
+|---|---|---|
+| Somatic oncogenicity | `somatic_oncogenicity_score`, `somatic_oncogenicity_class`, `somatic_oncogenicity_criteria` | Prioritize rare, technically credible variants using ClinGen/CGC/VICC-style evidence. |
+| Germline ACMG/AMP | `germline_acmg_points`, `germline_acmg_class`, `germline_acmg_criteria`, `germline_disposition` | Help distinguish common/benign germline polymorphisms from possible pathogenic germline findings. |
+
+In tumor-only analysis, possible pathogenic germline findings are not treated as
+confirmed germline results. They are flagged for review and should be resolved
+with a validated germline workflow when clinically relevant.
+
+```{r guideline-summary}
+guideline_file <- file.path(outdir, "guideline_classification_summary.tsv")
+if (file.exists(guideline_file)) {
+  data.table::fread(guideline_file)
 }
 ```
 
@@ -440,6 +487,67 @@ update review_labels.tsv -> rerun pipeline
 Do not use ML probability alone to call a variant somatic. It should support,
 not replace, hard filters, biological interpretation, matched normal data when
 available, and manual review.
+
+# SNP-based ancestry analysis
+
+The ancestry module uses only autosomal biallelic SNPs. The preferred method is
+PCA with projection onto an external reference panel, following the
+EIGENSTRAT/EIGENSOFT-style ancestry analysis used for population structure and
+stratification correction. Without a reference panel, the pipeline can still run
+cohort PCA, but this should be interpreted only as internal structure, not as a
+population ancestry assignment.
+
+Tumor-only caveat: ancestry is ideally inferred from germline genotypes. In
+tumor-only data, VAF can be distorted by purity, copy number and contamination.
+The module therefore selects common SNP-like sites and reports QC/status rather
+than forcing an ancestry call.
+
+SNP selection:
+
+| Criterion | Default intent |
+|---|---|
+| Autosomal only | Exclude sex chromosomes and mitochondrial variants. |
+| Biallelic SNV | Use only A/C/G/T SNPs. |
+| Population AF | Prefer common/informative SNPs. |
+| VAF | Keep heterozygous-like and homozygous-alt-like calls. |
+| Depth/support | Avoid weak genotype evidence. |
+| LD pruning | Reduce correlated SNPs before PCA. |
+
+Reference genotype format:
+
+```text
+sample_id	population	superpopulation	chrom	pos	ref	alt	dosage
+HG00096	GBR	EUR	1	12345	A	G	1
+HG00097	GBR	EUR	1	12345	A	G	0
+NA19625	MXL	AMR	1	12345	A	G	2
+```
+
+`dosage` is the number of alternate alleles: `0`, `1` or `2`.
+
+```{r ancestry-status}
+ancestry_status_file <- file.path(outdir, "ancestry_status.tsv")
+if (file.exists(ancestry_status_file)) {
+  data.table::fread(ancestry_status_file)
+}
+```
+
+```{r ancestry-sample-qc}
+ancestry_qc_file <- file.path(outdir, "ancestry_sample_qc.tsv")
+if (file.exists(ancestry_qc_file)) {
+  data.table::fread(ancestry_qc_file)
+}
+```
+
+Important output files:
+
+| File | Meaning |
+|---|---|
+| `ancestry_status.tsv` | Whether SNP selection, PCA, and reference projection were possible. |
+| `ancestry_snp_set.tsv` | SNP-like variants selected from the tumor-only table. |
+| `ancestry_sample_qc.tsv` | Number of SNPs per sample and missingness. |
+| `ancestry_snp_qc.tsv` | Per-SNP call rate and allele frequency in the cohort matrix. |
+| `ancestry_pca_scores.tsv` | Cohort PCA or projected PC coordinates. |
+| `ancestry_assignments.tsv` | Nearest reference population/superpopulation when a reference panel is supplied. |
 
 # TMB
 
@@ -589,9 +697,9 @@ viewer:
 | Set | Why |
 |---|---|
 | 50 `high_confidence_somatic` | Estimate false-positive rate among retained calls. |
-| 50 `probable_germline` | Confirm population/germline filter behavior. |
-| 50 `probable_artifact` | Confirm technical artifact patterns. |
-| 50 `uncertain` | Tune thresholds and rescue rules. |
+| 50 `likely_germline` | Confirm population/germline filter behavior. |
+| 50 `likely_artifact` or `technical_fail` | Confirm technical artifact patterns. |
+| 50 `uncertain_tumor_only` or `manual_review_required` | Tune thresholds and rescue rules. |
 | All `validation_rescue_candidate` | Curated databases may reveal true positives near thresholds. |
 | Recurrent same-position variants | Distinguish hotspot biology from cohort artifact/polymorphism. |
 

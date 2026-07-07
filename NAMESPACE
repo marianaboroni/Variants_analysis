@@ -1,0 +1,11 @@
+# Hand-maintained (roxygen2 not required to load the package).
+# Public API only; all other functions are internal.
+export(run_tumor_only)
+export(prepare_cosmic_db)
+export(annotate_oncokb)
+export(create_maf)
+export(render_tumor_only_report)
+export(check_installation)
+importFrom(graphics, plot.new)
+importFrom(stats, median, quantile, setNames)
+importFrom(utils, head, tail)

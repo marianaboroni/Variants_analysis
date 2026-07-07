@@ -152,6 +152,8 @@ classify_variants <- function(x, cfg) {
 
   population_low <- x$population_category == "population_low_frequency"
   vaf_near_germline <- !is.na(x$distance_vaf_05) & x$distance_vaf_05 <= 0.10
+  acmg_pathogenic_review <- safe_col_chr(x, "germline_disposition") == "possible_pathogenic_germline_review"
+  acmg_benign_germline <- safe_col_chr(x, "germline_disposition") == "likely_benign_germline_polymorphism"
   x$final_class[population_low & vaf_near_germline & hard_pass] <- "likely_germline"
   x$primary_reason[population_low & vaf_near_germline & hard_pass] <- "population_low_vaf_germline_like"
   x$final_class[population_low & !vaf_near_germline & hard_pass] <- "manual_review_required"
@@ -163,12 +165,25 @@ classify_variants <- function(x, cfg) {
   x$final_class[artifact_possible & x$final_class %in% c("uncertain_tumor_only", "manual_review_required")] <- "manual_review_required"
   x$primary_reason[artifact_possible & x$final_class == "manual_review_required"] <- "possible_artifact"
 
+  x$final_class[acmg_benign_germline & hard_pass] <- "likely_germline"
+  x$primary_reason[acmg_benign_germline & hard_pass] <- "acmg_likely_benign_germline_polymorphism"
+
+  x$final_class[acmg_pathogenic_review & hard_pass] <- "manual_review_required"
+  x$primary_reason[acmg_pathogenic_review & hard_pass] <- "possible_pathogenic_germline_requires_review"
+
   artifact_not_detected <- x$artifact_category == "artifact_not_detected"
-  somatic_support <- x$oncogenic_category == "oncogenic_exact" & x$population_category == "population_rare_or_absent"
+  guideline_oncogenic <- safe_col_chr(x, "somatic_oncogenicity_class") %in% c("Oncogenic", "Likely Oncogenic")
+  somatic_support <- (x$oncogenic_category == "oncogenic_exact" | guideline_oncogenic) &
+    x$population_category == "population_rare_or_absent" &
+    !acmg_pathogenic_review
   probable_support <- x$technical_evidence_score >= 0.55 & x$population_category == "population_rare_or_absent" & x$artifact_category %in% c("artifact_not_detected", "artifact_uninformative")
 
   x$final_class[somatic_support & hard_pass] <- "high_confidence_somatic"
-  x$primary_reason[somatic_support & hard_pass] <- "oncogenic_exact_rare_good_quality"
+  x$primary_reason[somatic_support & hard_pass] <- ifelse(
+    guideline_oncogenic[somatic_support & hard_pass],
+    "somatic_oncogenicity_guideline_rare_good_quality",
+    "oncogenic_exact_rare_good_quality"
+  )
 
   x$final_class[!somatic_support & probable_support & hard_pass] <- "probable_somatic"
   x$primary_reason[!somatic_support & probable_support & hard_pass] <- "probable_somatic_rule"
@@ -177,7 +192,7 @@ classify_variants <- function(x, cfg) {
   x$final_class[high_conflict] <- "manual_review_required"
   x$primary_reason[high_conflict] <- "conflicting_evidence_with_somatic"
 
-  uncertain_conflict <- x$final_class == "uncertain_tumor_only" & (artifact_possible | (!population_low & x$oncogenic_category == "oncogenic_exact" & x$population_category != "population_rare_or_absent"))
+  uncertain_conflict <- x$final_class == "uncertain_tumor_only" & (artifact_possible | (!population_low & (x$oncogenic_category == "oncogenic_exact" | guideline_oncogenic) & x$population_category != "population_rare_or_absent"))
   x$final_class[uncertain_conflict] <- "manual_review_required"
   x$primary_reason[uncertain_conflict] <- "uncertain_conflict_requires_review"
 
@@ -186,10 +201,27 @@ classify_variants <- function(x, cfg) {
   x$rule_based_class <- x$final_class
   x$evidence_for_somatic <- ifelse(x$final_class %in% c("high_confidence_somatic", "probable_somatic"), "rule_support", "")
   x$evidence_against_somatic <- ifelse(x$final_class %in% c("likely_germline", "likely_artifact", "technical_fail"), "rule_against", "")
+  x$evidence_against_somatic[acmg_pathogenic_review] <- paste_nonempty(
+    x$evidence_against_somatic[acmg_pathogenic_review],
+    "possible_pathogenic_germline",
+    sep = ";"
+  )
   x$suggested_label <- map_final_class_to_suggested_label(x$final_class)
   x$recommended_action <- map_final_class_to_action(x$final_class)
 
   x
+}
+
+safe_col_chr <- function(x, col) {
+  if (!(col %in% names(x))) return(rep(NA_character_, nrow(x)))
+  as.character(x[[col]])
+}
+
+paste_nonempty <- function(a, b, sep = ";") {
+  a <- as.character(a)
+  b <- as.character(b)
+  ifelse(is.na(a) | a == "", b,
+         ifelse(is.na(b) | b == "", a, paste(a, b, sep = sep)))
 }
 
 classify_population_germline_evidence <- function(x, cfg) {
@@ -252,14 +284,15 @@ classify_internal_recurrence <- function(x, cfg) {
 }
 
 classify_oncogenic_evidence <- function(x, cfg) {
+  # OncoKB intentionally excluded (post-hoc annotation only; see R/oncokb.R and
+  # docs/REFACTOR_AUDIT.md RISK-1). Oncogenic evidence here derives from
+  # cancer-hotspot support and COSMIC recurrence.
   oncogenic <- rep("oncogenic_none", nrow(x))
   exact_oncogenic <- x$hotspot_match & x$hotspot_tumor_specific
   supportive_oncogenic <- x$hotspot_match & !x$hotspot_tumor_specific
-  gene_only <- x$oncokb_match & !x$hotspot_match
 
   oncogenic[exact_oncogenic] <- "oncogenic_exact"
   oncogenic[supportive_oncogenic] <- "oncogenic_supportive"
-  oncogenic[gene_only] <- "oncogenic_gene_only"
   oncogenic[!is.na(x$cosmic_match) & x$cosmic_match & oncogenic == "oncogenic_none"] <- "oncogenic_supportive"
   oncogenic
 }
@@ -277,4 +310,3 @@ map_final_class_to_action <- function(final_class) {
                 ifelse(final_class %in% c("likely_artifact", "technical_fail"), "remove_as_artifact",
                        ifelse(final_class == "uncertain_tumor_only", "review_as_uncertain", "manual_review_required"))))
 }
-

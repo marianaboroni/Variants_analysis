@@ -1,0 +1,108 @@
+# tumoronly — minimal, documented example configuration.
+# Only the OncoKB section is optional; the core pipeline does not require it.
+
+analysis:
+  run_id: example_run          # optional; derived from the input checksum if omitted
+  output_dir: results          # run outputs go to results/<run_id>/
+  threads: 4
+
+input:
+  vcf: data/demo/variants.tsv  # VEP-annotated VCF (.vcf/.vcf.gz) or annotated TSV
+  delimiter: "\t"
+  genome_build: GRCh38         # prevails over the VCF header; conflict => error
+  sample_metadata: data/demo/sample_metadata.tsv
+
+reference:
+  fasta: null                  # target-build FASTA, enables COSMIC REF validation
+  chain_file: null             # UCSC chain, only needed for cross-build COSMIC
+
+cosmic:
+  # Point to an already-prepared processed DB, OR give raw_file to build one.
+  processed_db: null           # e.g. db/cosmic/v99/GRCh38_to_GRCh38
+  raw_file: null               # e.g. data/COSMIC_updated.tsv.gz
+  release: v99
+  source_build: GRCh38
+  target_build: GRCh38
+  cache_dir: db/cosmic
+  rebuild: false
+  # tumor-type-stratified COSMIC evidence (see docs/COSMIC_DECISION_RULES.md)
+  tumor_type_mapping: config/cosmic_tumor_type_mapping.tsv
+  pan_cancer_min_tumor_types: 5
+  # OS4/OM4 are granted ONLY from tumor-context occurrences (heuristic thresholds;
+  # see docs/COSMIC_OS4_OM4_AUDIT.md). Global-only recurrence never grants them.
+  os4_min_matched_occurrences: 10
+  om4_min_matched_occurrences: 3
+
+# --- scientific thresholds (unchanged from the original pipeline) ------------
+cohort:
+  cancer_type: "PANCANCER"
+  recurrent_variant_fraction_artifact: 0.30
+  recurrent_locus_fraction_artifact: 0.40
+
+cancer:
+  default_tumor_type: "PANCANCER"
+
+hard_filters:
+  enabled: true
+  assay: "WGS"
+  adaptive_depth_fraction: 0.35
+  adaptive_q25_depth_fraction: 0.50
+  missing_required_metrics_fail: false
+
+technical_filters:
+  min_depth: 20
+  min_alt_count_snv: 5
+  min_alt_count_indel: 8
+  min_af_snv: 0.03
+  min_af_indel: 0.05
+  min_tlod: 6
+  min_mbq: 25
+  min_mmq: 40
+
+population_filters:
+  common_af_threshold: 0.01
+  low_frequency_af_threshold: 0.001
+  use_population_columns:
+    - gnomADg_AF
+
+scoring:
+  high_confidence_somatic: 0.75
+  probable_somatic: 0.55
+  probable_germline: 0.70
+  probable_artifact: 0.70
+
+guideline_classification:
+  enabled: true
+  somatic:
+    benign_maf_very_strong: 0.05
+    benign_maf_strong: 0.01
+    absent_population_af: 0.00001
+    cosmic_moderate_count: 3
+    cosmic_high_count: 10
+  germline:
+    ba1_af: 0.05
+    bs1_af: 0.01
+    pm2_af: 0.00001
+
+driver_resources:
+  driver_genes: data/demo/driver_genes.tsv
+  hotspots: data/demo/hotspots.tsv
+
+driver_scoring:
+  known_driver: 0.75
+  probable_driver: 0.60
+  possible_driver: 0.40
+
+# --- OncoKB (optional, post-hoc, never affects filtering) --------------------
+oncokb:
+  enabled: false
+  scope: retained              # retained | all
+  cache_dir: db/oncokb_cache
+  endpoint: "https://www.oncokb.org/api/v1"
+  # token comes ONLY from the ONCOKB_TOKEN environment variable
+
+report:
+  format: html
+  oncoplot:
+    top_genes: 20
+    remove_non_mutated: false

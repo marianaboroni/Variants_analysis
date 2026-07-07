@@ -1,0 +1,12 @@
+##fileformat=VCFv4.2
+##reference=GRCh38
+##contig=<ID=1,length=248956422>
+##contig=<ID=7,length=159345973>
+##INFO=<ID=CSQ,Number=.,Type=String,Description="Consequence annotations from Ensembl VEP. Format: Allele|Consequence|IMPACT|SYMBOL|Gene|Feature|HGVSp|gnomADe_AF|CLIN_SIG">
+##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
+##FORMAT=<ID=AD,Number=R,Type=Integer,Description="Allelic depths">
+##FORMAT=<ID=DP,Number=1,Type=Integer,Description="Read depth">
+##FORMAT=<ID=AF,Number=A,Type=Float,Description="Allele fraction">
+#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO	FORMAT	TUMOR1
+7	140453136	.	A	T	500	PASS	CSQ=T|missense_variant|MODERATE|BRAF|ENSG00000157764|ENST00000288602|p.Val600Glu|0.0|.	GT:AD:DP:AF	0/1:40,38:78:0.48
+12	25398284	.	C	A	480	PASS	CSQ=A|missense_variant|MODERATE|KRAS|ENSG00000133703|ENST00000256078|p.Gly12Val|0.0001|.	GT:AD:DP:AF	0/1:35,35:70:0.50

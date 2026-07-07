@@ -8,15 +8,18 @@ flowchart TD
   D --> E["Recorrencia interna<br/>pseudo-panel of normals<br/>pan-coorte e por tipo tumoral"]
   E --> F["Scores integrados<br/>somatico, germinativo, artefato"]
   F --> G["Validacao externa<br/>OncoKB / COSMIC / hotspots"]
-  G --> H["Classificacao final tumor-only<br/>high_confidence_somatic | probable_somatic<br/>uncertain | probable_germline | probable_artifact"]
+  G --> P["Diretrizes<br/>oncogenicidade ClinGen/CGC/VICC<br/>ACMG/AMP germinativo"]
+  P --> H["Classificacao final tumor-only<br/>high_confidence_somatic | probable_somatic<br/>uncertain_tumor_only | likely_germline | likely_artifact"]
 
   H --> I["ML semi-supervisionado<br/>pseudo-rotulos TP/FP<br/>probabilidade de verdadeiro positivo"]
   H --> J["Driver vs passenger<br/>genes drivers, hotspots,<br/>dNdScv e CHASMplus inputs"]
   H --> K["TMB<br/>variantes somaticas contaveis<br/>divididas por callable_mb"]
   H --> L["Clonalidade<br/>CCF com pureza/CN<br/>fallback por VAF"]
-  H --> N["Figuras e tabelas<br/>oncoplots, QC, TMB,<br/>drivers, clonalidade"]
+  H --> O["Ancestralidade<br/>SNPs autossomicos comuns<br/>PCA/projecao em referencia"]
+  H --> N["Figuras e tabelas<br/>oncoplots, QC, TMB,<br/>drivers, clonalidade, ancestralidade"]
 
   I --> N
   J --> N
   K --> N
   L --> N
+  O --> N

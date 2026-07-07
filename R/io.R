@@ -9,7 +9,160 @@ read_variants <- function(path, delimiter = "\t") {
   if (!file.exists(path)) {
     stop("Input variant file not found: ", path)
   }
+  if (grepl("[.]vcf([.]gz)?$", path, ignore.case = TRUE)) {
+    return(read_annotated_vcf(path))
+  }
   data.table::fread(path, sep = delimiter, data.table = FALSE, na.strings = c("", ".", "NA"))
+}
+
+read_annotated_vcf <- function(path) {
+  meta <- read_vcf_meta(path)
+  csq_fields <- parse_vcf_annotation_format(meta, "CSQ")
+  ann_fields <- parse_vcf_annotation_format(meta, "ANN")
+  x <- data.table::fread(path, skip = "#CHROM", data.table = FALSE, na.strings = c("", ".", "NA"))
+  names(x)[names(x) == "#CHROM"] <- "CHROM"
+  if (!"INFO" %in% names(x)) {
+    stop("VCF input does not contain an INFO column: ", path)
+  }
+  x <- expand_vcf_samples(x, path)
+  x <- add_info_annotations(x, csq_fields, ann_fields)
+  x
+}
+
+read_vcf_meta <- function(path, n = 10000) {
+  con <- if (grepl("[.]gz$", path, ignore.case = TRUE)) gzfile(path, open = "rt") else file(path, open = "rt")
+  on.exit(close(con), add = TRUE)
+  out <- character()
+  repeat {
+    z <- readLines(con, n = 1, warn = FALSE)
+    if (length(z) == 0) break
+    out <- c(out, z)
+    if (startsWith(z, "#CHROM") || length(out) >= n) break
+  }
+  out
+}
+
+parse_vcf_annotation_format <- function(meta, id) {
+  line <- meta[grepl(paste0("ID=", id, ","), meta, fixed = TRUE)]
+  if (length(line) == 0) return(character())
+  line <- line[[1]]
+  fmt <- sub(".*Format: ", "", line)
+  fmt <- sub("[\">].*", "", fmt)
+  fields <- strsplit(fmt, "[|]", perl = TRUE)[[1]]
+  trimws(fields)
+}
+
+expand_vcf_samples <- function(x, path) {
+  if (!"FORMAT" %in% names(x)) {
+    x$Tumor_Sample_Barcode <- tools::file_path_sans_ext(basename(path))
+    return(x)
+  }
+  fixed_cols <- c("CHROM", "POS", "ID", "REF", "ALT", "QUAL", "FILTER", "INFO", "FORMAT")
+  sample_cols <- setdiff(names(x), fixed_cols)
+  if (length(sample_cols) == 0) {
+    x$Tumor_Sample_Barcode <- tools::file_path_sans_ext(basename(path))
+    return(x)
+  }
+
+  pieces <- lapply(sample_cols, function(sample_col) {
+    y <- x[, fixed_cols[fixed_cols %in% names(x)], drop = FALSE]
+    y$Tumor_Sample_Barcode <- sample_col
+    fmt <- strsplit(as.character(y$FORMAT), ":", fixed = TRUE)
+    vals <- strsplit(as.character(x[[sample_col]]), ":", fixed = TRUE)
+    y$GT <- extract_format_field(fmt, vals, "GT")
+    y$AD <- extract_format_field(fmt, vals, "AD")
+    y$DP <- to_numeric_safe(extract_format_field(fmt, vals, "DP"))
+    y$AF <- to_numeric_safe(extract_format_field(fmt, vals, "AF"))
+    y$TLOD <- to_numeric_safe(extract_format_field(fmt, vals, "TLOD"))
+    y
+  })
+  do.call(rbind, pieces)
+}
+
+extract_format_field <- function(fmt, vals, key) {
+  out <- rep(NA_character_, length(fmt))
+  for (i in seq_along(fmt)) {
+    idx <- match(key, fmt[[i]])
+    if (!is.na(idx) && length(vals[[i]]) >= idx) out[[i]] <- vals[[i]][[idx]]
+  }
+  out
+}
+
+add_info_annotations <- function(x, csq_fields, ann_fields) {
+  info <- as.character(x$INFO)
+  x$CSQ <- extract_info_value(info, "CSQ")
+  x$ANN <- extract_info_value(info, "ANN")
+
+  if (any(!is.na(x$CSQ)) && length(csq_fields) > 0) {
+    csq <- parse_pipe_annotation(x$CSQ, csq_fields)
+    x$SYMBOL <- first_nonmissing_annotation(csq, c("SYMBOL", "Gene", "Feature"))
+    x$Consequence <- first_nonmissing_annotation(csq, c("Consequence"))
+    x$HGVSp <- first_nonmissing_annotation(csq, c("HGVSp", "Protein_position", "Amino_acids"))
+    x$Existing_variation <- first_nonmissing_annotation(csq, c("Existing_variation"))
+    x$CLINVAR_SIG <- first_nonmissing_annotation(csq, c("CLIN_SIG", "ClinVar_CLNSIG"))
+    x$gnomADe_AF <- to_numeric_safe(first_nonmissing_annotation(csq, c("gnomADe_AF", "gnomADg_AF", "gnomAD_AF", "MAX_AF")))
+  }
+
+  if (any(!is.na(x$ANN)) && length(ann_fields) > 0) {
+    ann <- parse_pipe_annotation(x$ANN, ann_fields)
+    x$SYMBOL <- coalesce_value(x$SYMBOL, first_nonmissing_annotation(ann, c("Gene_Name", "Gene_ID")))
+    x$Consequence <- coalesce_value(x$Consequence, first_nonmissing_annotation(ann, c("Annotation")))
+    x$HGVSp <- coalesce_value(x$HGVSp, first_nonmissing_annotation(ann, c("HGVS.p", "HGVS_p")))
+  }
+
+  x$Gene.refGene <- extract_info_value(info, "Gene.refGene")
+  x$ExonicFunc.refGene <- extract_info_value(info, "ExonicFunc.refGene")
+  x$Func.refGene <- extract_info_value(info, "Func.refGene")
+  x$AAChange.refGene <- extract_info_value(info, "AAChange.refGene")
+  x$SYMBOL <- coalesce_value(x$SYMBOL, x$Gene.refGene)
+  x$Consequence <- coalesce_value(x$Consequence, x$ExonicFunc.refGene)
+  x$Consequence <- coalesce_value(x$Consequence, x$Func.refGene)
+  x$HGVSp <- coalesce_value(x$HGVSp, x$AAChange.refGene)
+
+  pop_keys <- c("AF", "AF_popmax", "gnomAD_AF", "gnomADg_AF", "gnomADe_AF", "GMAF")
+  for (key in pop_keys) {
+    if (!(key %in% names(x))) x[[key]] <- to_numeric_safe(extract_info_value(info, key))
+  }
+  x
+}
+
+extract_info_value <- function(info, key) {
+  prefix <- paste0(key, "=")
+  vapply(strsplit(info, ";", fixed = TRUE), function(fields) {
+    hit <- fields[startsWith(fields, prefix)]
+    if (length(hit) == 0) return(NA_character_)
+    sub(prefix, "", hit[[1]], fixed = TRUE)
+  }, character(1))
+}
+
+parse_pipe_annotation <- function(values, fields) {
+  first <- sub(",.*$", "", as.character(values))
+  parts <- strsplit(first, "[|]", perl = TRUE)
+  out <- setNames(vector("list", length(fields)), fields)
+  for (field in fields) out[[field]] <- rep(NA_character_, length(values))
+  for (i in seq_along(parts)) {
+    if (is.na(first[[i]]) || first[[i]] == "") next
+    z <- parts[[i]]
+    n <- min(length(z), length(fields))
+    for (j in seq_len(n)) out[[fields[[j]]]][[i]] <- z[[j]]
+  }
+  as.data.frame(out, stringsAsFactors = FALSE)
+}
+
+first_nonmissing_annotation <- function(x, candidates) {
+  candidates <- candidates[candidates %in% names(x)]
+  if (length(candidates) == 0) return(rep(NA_character_, nrow(x)))
+  out <- x[[candidates[[1]]]]
+  for (nm in candidates[-1]) out <- coalesce_value(out, x[[nm]])
+  out
+}
+
+coalesce_value <- function(a, b) {
+  if (is.null(a)) return(b)
+  out <- a
+  replace <- is.na(out) | out == "" | out == "."
+  out[replace] <- b[replace]
+  out
 }
 
 write_tsv <- function(x, path) {

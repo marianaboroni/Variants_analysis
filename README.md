@@ -1,376 +1,296 @@
-# Tumor-only Somatic Variant Filtering Pipeline
+# tumoronly — traceable tumor-only somatic variant filtering
 
-R package for prioritizing tumor-only somatic variants in WGS/WES/panel sequencing, particularly for cohorts without paired normal samples or panel of normals. Designed with Brazilian cohort context in mind.
+`tumoronly` is a reproducible R package for tumor-only somatic variant analysis.
+It reads a VEP-annotated VCF, validates the genome build, applies a documented and
+auditable set of tumor-only filters, annotates variants against a locally-prepared
+COSMIC database (lifted over **once**, at build time, by canonical genomic key),
+exports a `maftools`-compatible MAF, draws oncoplots with `maftools`, and renders an
+explanatory HTML report. **OncoKB annotation is a separate, optional step that never
+alters filtering decisions.**
 
-## Overview
+## 1. What it does
 
-The pipeline computes:
+```
+VEP VCF ─▶ build check ─▶ tumor-only filters ─▶ COSMIC evidence ─▶ classify
+        ─▶ decision trail ─▶ tables + MAF + oncoplot + HTML report
+                                            └▶ (optional) OncoKB annotation
+```
 
-- Technical features from Mutect2/DRAGEN/VEP
-- Internal cohort recurrence (pseudo-panel of normals)
-- Recurrence by tumor type (when OncoTree metadata is available)
-- Adaptive hard filters by sample and assay type (WGS, WES, PANEL)
-- Per-sample variant calling QC
-- Semi-supervised ML model for true positive prioritization
-- Tumor mutational burden (TMB) per sample
-- Clonality/CCF estimates when purity and local copy number are available
-- Germline and artifact probability scores
-- Somatic probability scores
-- Auditable final classification
-- External validation with OncoKB and COSMIC
-- Driver vs. passenger classification (separate from somatic classification)
-- Export for external models (dNdScv, CHASMplus)
-- QC, TMB, driver/passenger, recurrence, clonality, and oncoplot figures
+Every variant keeps a full **decision trail** (`filter_status`, `filter_reasons`,
+`filters_failed`, `filters_passed`, `confidence_category`, `confidence_score`) and is
+retained in `variants_all` — nothing is dropped silently.
 
-When `maftools` is installed, native MAF visualization plots are generated; otherwise, a fallback oncoplot is created using `ggplot2`.
+## Tutorial: how the pipeline works (end to end)
 
-**Important:** OncoKB and COSMIC are used for validation/prioritization, not as standalone proof of somaticity.
+This is a walkthrough of one analysis. Commands are the single CLI `tumoronly`
+(`exec/tumoronly` in the source tree, or `library(tumoronly)` if installed).
 
-
-
-## Input Format
-
-A TSV/CSV table with one row per variant per sample. Columns can follow MAF, VEP, or custom formats. The pipeline expects to find or infer:
-
-- **Sample ID:** `Tumor_Sample_Barcode`, `sample`, `Sample`, or similar
-- **Coordinates:** `CHROM`, `START`, `REF`, `ALT`
-- **Gene:** `Hugo_Symbol`, `SYMBOL`, `Gene`
-- **Consequence:** `Consequence`, `Variant_Classification`
-- **Depth:** `DP`
-- **Alt support:** `alt_count`, `t_alt_count`, `AD`
-- **Tumor AF:** `AF`, `VAF`, `tumor_f`
-- **Quality:** `TLOD`, `MBQ`, `MMQ`, `STRANDQ`, `STRQ`, `FILTER`
-- **Population frequencies (VEP/gnomAD):** `gnomADe_AF`, `gnomADg_AF`, `AFR_AF`, `AMR_AF`, etc.
-- **Tumor type:** `tumor_type`, `ONCOTREE_CODE`, `Cancer_Type`, `Tumor_Type`, or via `input.sample_metadata`
-
-Missing fields are treated as `NA` with minimal or neutral penalty. Preserving all technical fields from the VCF improves classification.
-
-For Brazilian cohorts, configure local population frequency columns when available (e.g., `ABraOM_AF`, `BIPMed_AF`). The pipeline uses the maximum AF observed across configured population columns to reduce false positives from variants under-represented in global databases.
-
-
-
-## Quick Start
-
-A Bioconductor-style vignette is available in [vignettes/tumor_only_variant_filtering.Rmd](vignettes/tumor_only_variant_filtering.Rmd). It describes pipeline usage, output structure, and how to interpret QC, ML results, TMB, driver classification, clonality, and figures.
-
-A workflow schematic is available in [figures/pipeline_fluxograma.svg](figures/pipeline_fluxograma.svg) (editable Mermaid version at [figures/pipeline_fluxograma.mmd](figures/pipeline_fluxograma.mmd)).
-
-Edit [config/example_config.yml](config/example_config.yml) and run:
+### Step 0 — check your environment
 
 ```bash
-Rscript scripts/run_automated_variant_analysis.R --config config/example_config.yml
+tumoronly doctor
 ```
 
-Or use the explicit alias:
+Reports which R packages / external tools are present and what that enables
+(cross-build COSMIC liftover, REF validation, OncoKB API, oncoplots, HTML report).
+The core pipeline only needs `data.table`, `yaml`, `jsonlite`, `digest`.
+
+### Step 1 — (once) prepare the local COSMIC database
+
+COSMIC is **not** redistributed — you download the TSV and prepare it **once**.
+Liftover (if your VCF and COSMIC differ in build), normalization, dedup, the
+canonical key `BUILD|CHROM|POS|REF|ALT`, a checksummed manifest and provenance
+tables are all produced here, never per sample:
 
 ```bash
-Rscript scripts/run_tumor_only_filter.R --config config/example_config.yml
+tumoronly prepare-cosmic --config config/example.yml
 ```
 
-## Key Output Files
+This is idempotent: re-running reuses the processed DB unless an input changed
+(then `--force` is required). It is optional — the pipeline runs without COSMIC,
+just without COSMIC evidence.
 
-**Classification & QC:**
-- `sample_qc_summary.tsv` — Per-sample variant calling QC
-- `variant_call_qc_summary.tsv` — Variant-level QC metrics
-- `variants_with_features.tsv` — Full feature matrix
-- `variants_scored.tsv` — Variants with all scores
-
-**Filtered Sets:**
-- `variants_high_confidence_somatic.tsv` — Pass all filters
-- `variants_probable_somatic.tsv` — Likely somatic, lower confidence
-- `variants_likely_passenger.tsv` — Somatic but unlikely driver
-- `variants_driver_candidates.tsv` — Candidate drivers
-- `variants_uncertain_for_review.tsv` — Manual review candidates
-- `removed_probable_germline.tsv` — Filtered as likely germline
-- `removed_probable_artifact.tsv` — Filtered as likely artifact
-
-**ML & Recurrence:**
-- `ml_filter_metrics.tsv` — ML model performance
-- `ml_training_labels.tsv` — Training labels used
-- `active_learning_candidates.tsv` — Candidates for manual curation
-- `cohort_recurrence_table.tsv` — Internal variant recurrence
-- `tumor_type_recurrence_table.tsv` — Recurrence by tumor type
-
-**External Model Exports:**
-- `dndscv_input.tsv` — dNdScv positive selection model
-- `chasmplus_missense_input.tsv` — CHASMplus driver prediction
-- `oncokb_cosmic_validation_summary.tsv` — OncoKB/COSMIC matches
-
-**TMB, Drivers & Clonality:**
-- `tmb_summary.tsv` — Tumor mutational burden per sample
-- `driver_classification_summary.tsv` — Driver classification summary
-- `clonality_summary.tsv` — CCF/clonality estimates
-
-**Manifest & Figures:**
-- `figure_manifest.tsv` — Metadata for all generated figures (file, type, plot category, status, notes)
-- `figures/` subdirectory with PNG and PDF versions of QC, TMB, driver, clonality plots, and optional maftools visualizations
-
-
-
-## Validation with OncoKB
-
-Preferably use output already annotated by OncoKB Annotator/MafAnnotator or a local reference standardized by [scripts/build_oncokb_cosmic_reference.R](scripts/build_oncokb_cosmic_reference.R). The file should support matching by coordinate or by `sample + gene + protein_change`. If `tumor_type`/OncoTree is available, the pipeline prioritizes tumor-type-specific matches before pan-cancer matches.
-
-Recognized columns:
-- `Tumor_Sample_Barcode`, `Sample`
-- `Hugo_Symbol`, `SYMBOL`
-- `HGVSp_Short`, `Protein_Change`, `HGVSp`
-- `CHROM`, `START`, `REF`, `ALT`
-- `ONCOGENIC`, `MUTATION_EFFECT`, `HIGHEST_LEVEL`, `LEVEL_1`, `LEVEL_2`, `LEVEL_3A`, `LEVEL_3B`, `LEVEL_4`
-
-## Validation with COSMIC
-
-Use a licensed/exported COSMIC table or VEP annotation with COSMIC identifiers in `Existing_variation`. COSMIC data is not auto-downloaded due to licensing requirements. Recognized columns:
-- `COSMIC_ID`, `COSMIC_MUTATION_ID`, `LEGACY_MUTATION_ID`
-- `Hugo_Symbol`, `Gene`
-- `HGVSp_Short`, `Mutation AA`, `Protein_Change`
-- `CHROM`, `START`, `REF`, `ALT`
-- `COSMIC_COUNT`, `FATHMM_PREDICTION`, `CNT`
-
-To build standardized local references:
+### Step 2 — run the analysis
 
 ```bash
-Rscript scripts/build_oncokb_cosmic_reference.R --config config/reference_build_example.yml
+tumoronly run --config config/example.yml
 ```
 
-This generates `oncokb_reference.tsv` and/or `cosmic_reference.tsv` in the configured directory, which can be used in `validation.oncokb` and `validation.cosmic` config settings.
+Internally, for each run:
 
+1. **Read + build check** — the VEP VCF header is parsed; `input.genome_build`
+   prevails but any conflict with the header is a hard error (build is never
+   guessed). The `CSQ` field order is read dynamically from the header; only the
+   needed fields are extracted.
+2. **Feature engineering** — depth, VAF, alt count, variant type, population AF,
+   PoN flag, etc. are derived per variant.
+3. **Technical filters** — adaptive depth / alt / VAF / TLOD / MBQ / MMQ + caller
+   `FILTER` + sample-QC gate → `hard_filter_pass`.
+4. **Scoring + classification** — evidence scores → a single conservative
+   `final_class` (the one and only decision point).
+5. **COSMIC evidence (tumor-type-stratified)** — variants are matched by the
+   canonical key; occurrences are split into the sample's tumor type vs. others
+   (see *Tumor-type-stratified COSMIC evidence* below). This affects
+   **confidence only** (experimental), never `filter_status`.
+6. **Decision trail** — every variant gets `filter_status` (PASS / REVIEW / FAIL),
+   `filter_reasons`, `filters_failed`, `filters_passed`, `CONFIDENCE_SCORE_BASE`,
+   `CONFIDENCE_CATEGORY_BASE`. No variant is dropped — excluded ones stay in
+   `variants_all` with their trail.
+7. **Outputs** — standardized run directory (tables, validated MAF, maftools
+   oncoplot, `manifest.json`, resolved config, HTML report).
 
+### Step 3 — (optional) OncoKB annotation, post-hoc
 
-## Driver Classification
-
-The pipeline separates two distinct questions:
-
-1. **`final_class`**: Does the variant appear real/somatic, or likely germline/artifact?
-2. **`driver_class`**: Among high-confidence somatic variants, is there evidence of driver status?
-
-**Classification levels:**
-- `known_driver` — Strong evidence in OncoKB/COSMIC/curated hotspots + high-confidence somatic
-- `probable_driver` — Driver gene compatible with tumor type + coherent functional consequence
-- `possible_driver` — Partial evidence, requires manual review
-- `likely_passenger` — High-confidence somatic but no driver support
-- `not_evaluable_as_driver` — Non-somatic, likely germline, likely artifact, or hard filter fail
-
-**Score sources (when available):**
-- OncoKB: `ONCOGENIC`, `MUTATION_EFFECT`, `HIGHEST_LEVEL`
-- COSMIC: `COSMIC_ID`, `COSMIC_COUNT`
-- Driver gene references: CGC, IntOGen, NCG, CGI, or custom table
-- Hotspot references: OncoKB, COSMIC, Cancer Hotspots, or custom table
-- Predictors: `SpliceAI`, `CADD`, `AlphaMissense`, `REVEL`, `MetaRNN`, `MetaLR`, `MutationTaster`, `SIFT`, `PolyPhen`
-- Structure/domain: `DOMAINS`, `COSMIC3D`, `AlphaFold_feature`, `functional_region`, `structure_feature`
-
-**Example driver genes file** (`driver_resources.driver_genes`):
-```
-gene	tumor_type	role	source	confidence
-TP53	UCEC	tumor_suppressor	CGC;IntOGen	canonical
-PIK3CA	UCEC	oncogene	CGC;IntOGen	canonical
-KRAS	PANCANCER	oncogene	CGC;OncoKB	canonical
+```bash
+export ONCOKB_TOKEN="..."      # token ONLY from the environment; never stored/logged
+tumoronly annotate-oncokb --run-dir results/example_run   # scope: retained | all
 ```
 
-**Example hotspots file** (`driver_resources.hotspots`):
-```
-tumor_type	Hugo_Symbol	HGVSp_Short	source	evidence
-PANCANCER	BRAF	p.V600E	OncoKB;COSMIC	canonical_hotspot
-UCEC	KRAS	p.G12V	OncoKB;COSMIC	recurrent_hotspot
-```
+This reads the **frozen** results, adds `ONCOKB_*` columns to a separate table,
+and **never** changes `filter_status`. If the API is unavailable the step still
+completes (variants marked not annotated).
 
-The `dndscv_input.tsv` and `chasmplus_missense_input.tsv` files are generated from high-confidence and probable somatic variants for external re-evaluation via positive selection and driver prediction models.
+### Step 4 — (re-)render the report
 
-
-
-## Incremental ML for False Positive Reduction
-
-The pipeline includes an incremental ML layer (`ml_filter`) combining:
-
-- Manual review labels in `ml_filter.review_labels`
-- Auditable pseudo-labels from pipeline rules
-- Higher weights for manual curation (`manual_label_weight`) vs. pseudo-labels (`pseudo_label_weight`)
-- Global pan-cancer model
-- Tumor-type-specific models when sufficient labels are available
-
-Benefits:
-- Leverage curated manual reviews for learning
-- Transparent rules enable interpretation of decisions
-- Active learning identifies uncertain candidates for manual review
-- Incremental curation improves future predictions
-
-## Technical Architecture
-
-**Workflow stages** ([R/workflow.R](R/workflow.R)):
-1. Input standardization + sample metadata
-2. Feature extraction (technical + population-based)
-3. Hard filtering (sample/assay-adaptive)
-4. Scoring (conservative classification + manual review rules)
-5. ML layer (auxiliary to hard filters)
-6. Clonality/CCF estimation
-7. TMB calculation
-8. Driver classification
-9. Reporting (filter reports, metrics, exports)
-10. Visualization (figures + manifest)
-
-**Configuration** ([config/](config/)):
-- YAML-driven settings for all stages
-- Sample-specific overrides
-- Population frequency column mapping for Brazilian cohorts
-- OncoKB/COSMIC reference paths
-
-**Figure manifest** (`figure_manifest.tsv`):
-Each generated figure is logged with:
-- `file` — Output path
-- `type` — Figure type identifier
-- `plot_category` — High-level category (maftools, oncoplot, classification, tmb, driver, qc, recurrence, clonality)
-- `status` — written, skipped, failed
-- `note` — Generation notes or failure reason
-
-
-
-Rotulos manuais reconhecidos:
-
-- positivos: `true_somatic`, `validated_somatic`, `true_positive`, `TP`;
-- negativos: `false_positive`, `artifact`, `germline`, `polymorphism`,
-  `technical`, `not_somatic`;
-- incertos: `uncertain`, `ambiguous`, `unknown`, `not_evaluable`, que nao entram
-  no treino.
-
-Exemplo de `review_labels.tsv`:
-
-```text
-sample_id	tumor_type	chrom	pos	ref	alt	gene	protein_change	reviewed_label	evidence	reviewer	review_date	notes
-S3	UCEC	7	140453136	A	T	BRAF	p.V600E	true_somatic	IGV_hotspot	MB	2026-06-21	adequate depth and VAF
-S4	UCEC	7	140453136	A	T	BRAF	p.V600E	artifact	low_depth_low_quality	MB	2026-06-21	technical failure
+```bash
+tumoronly report --run-dir results/example_run
 ```
 
-O pareamento dos rotulos e feito por prioridade:
+### What is expected as input
 
-```text
-sample+coord -> sample+gene/protein -> tumor_type+coord ->
-tumor_type+gene/protein -> coord -> gene/protein
+- **Primary input (`input.vcf`)**: a **VEP-annotated VCF** (`.vcf`/`.vcf.gz`) — e.g.
+  Mutect2 output annotated with Ensembl VEP (a `CSQ` INFO field). A wide,
+  VEP-flattened TSV is also accepted. Per-sample genotype columns (`GT:AD:DP:AF`,
+  `TLOD`, …) are parsed. Useful CSQ fields: `SYMBOL`, `Consequence`, `HGVSp`,
+  `gnomAD*_AF`, `CLIN_SIG`.
+- **`input.genome_build`**: `GRCh37` or `GRCh38` (prevails over the header).
+- **Sample metadata (optional, `input.sample_metadata`)**: TSV with `sample_id`
+  and, for COSMIC tumor-context, `tumor_type`, `tumor_subtype`, `primary_site`,
+  `histology`.
+- **COSMIC (optional)**: a raw COSMIC TSV (`cosmic.raw_file`) with genomic
+  coordinates + `PRIMARY_SITE`/`PRIMARY_HISTOLOGY`/counts, plus the versioned
+  harmonization table `config/cosmic_tumor_type_mapping.tsv`.
+- **Reference FASTA (optional, `reference.fasta`)**: enables REF-allele validation
+  during COSMIC preparation.
+
+### What is produced as output
+
+```
+results/<run_id>/
+  manifest.json            provenance, checksums, tool/package versions, counts
+  config.resolved.yml      the exact configuration used (defaults resolved)
+  logs/
+  tables/
+    variants_all.tsv.gz         every input variant + full decision trail
+    variants_retained.tsv.gz    PASS / REVIEW (kept as candidates / for review)
+    variants_excluded.tsv.gz    FAIL (kept, not deleted)
+    filter_audit.tsv.gz         per-filter definitions + counts + % loss
+    cosmic_matches.tsv.gz       global + tumor-context COSMIC evidence per variant
+    oncokb_annotations.tsv.gz   only after annotate-oncokb
+  maf/filtered.maf.gz            validated with maftools::read.maf
+  plots/                         maftools oncoplot + summary
+  report/tumor_only_report.html  explanatory report (funnel, provenance, tables, limitations)
 ```
 
-Quando ha rotulos positivos e negativos suficientes, o pipeline treina:
+Key output columns to read first: `filter_status`, `CONFIDENCE_CATEGORY_BASE`,
+`final_class`, `filter_reasons`, and the COSMIC context columns
+(`COSMIC_TUMOR_CONTEXT_STATUS`, `COSMIC_MATCHING_TUMOR_OCCURRENCES`, …).
 
-- `glm_PANCANCER`: modelo global usando todos os tipos tumorais;
-- `glm_<TUMOR_TYPE>`: modelo especifico, por exemplo `glm_UCEC`, quando aquele
-  tumor tem exemplos suficientes.
+## 2. Limitations of tumor-only analysis
 
-Na predicao final, o modelo especifico do tipo tumoral e usado primeiro. Se ele
-nao existir, o pipeline usa o modelo pan-cancer como fallback.
+- Tumor-only calling **cannot definitively distinguish somatic from germline** variants.
+- **Presence in COSMIC is supporting evidence** of recurrence, not proof of somaticity.
+- **Absence from COSMIC does not exclude** relevance.
+- **OncoKB is used only as a confirmatory annotation** and never changes filtering.
+- Results require review by qualified professionals. This is **not a validated clinical test**.
 
-Saidas principais:
+## 3. Installation
 
-- `ml_label`: rotulo usado no treino;
-- `ml_label_source`: `manual_review` ou `pseudo_rules`;
-- `ml_true_positive_probability`: probabilidade final usada pelo pipeline;
-- `ml_pancancer_true_positive_probability`: probabilidade do modelo global;
-- `ml_tumor_type_true_positive_probability`: probabilidade do modelo tumoral;
-- `ml_model_scope`: `tumor_type` ou `pancancer`;
-- `ml_model_id`: identificador do modelo usado;
-- `ml_training_labels.tsv`: auditoria dos exemplos usados no treino;
-- `active_learning_candidates.tsv`: variantes sugeridas para a proxima rodada
-  de revisao manual;
-- `ml_filter_metrics.tsv`: status, contagem de rotulos e AUC de treino por
-  escopo.
+```r
+# from the package root
+install.packages(c("data.table", "yaml", "jsonlite", "digest"))   # required
+# optional but recommended:
+install.packages(c("maftools", "rmarkdown", "ggplot2"))
+# BiocManager::install(c("GenomicRanges", "rtracklayer", "Biostrings"))  # cross-build COSMIC
+# install.packages("httr2")                                              # OncoKB API
 
-Se nao houver positivos e negativos suficientes, o pipeline nao forca um modelo:
-ele grava `status = insufficient_training_labels` em `ml_filter_metrics.tsv` e
-ainda gera `active_learning_candidates.tsv` para orientar a curadoria. Isso evita
-treinar um classificador aparentemente sofisticado, mas biologicamente vazio.
-
-O ciclo recomendado e:
-
-```text
-rodar pipeline -> revisar active_learning_candidates.tsv ->
-atualizar review_labels.tsv -> rerodar pipeline
+R CMD INSTALL .
 ```
 
-Com o tempo, os modelos especificos por tumor ficam mais fortes; quando varios
-tipos tumorais acumulam rotulos confiaveis, o modelo pan-cancer passa a aprender
-padroes compartilhados entre tumores.
+You can also run without installing (dev mode): the CLI at `exec/tumoronly`
+auto-loads the sources.
 
-## TMB
+## 4. External dependencies (optional)
 
-O TMB e calculado a partir de variantes `high_confidence_somatic` e
-`probable_somatic` com consequencias proteicas/splice contaveis. Configure o
-denominador em `tmb.callable_mb`.
+| capability | needs |
+|---|---|
+| same-build COSMIC preparation | nothing extra |
+| **cross-build** COSMIC liftover | `rtracklayer` + UCSC chain file, **or** CrossMap, **or** UCSC `liftOver` |
+| COSMIC REF validation | `Biostrings` + target FASTA |
+| OncoKB annotation | `httr2` + `ONCOKB_TOKEN` env var |
+| oncoplots / MAF validation | `maftools` |
+| HTML report | `rmarkdown` (+ pandoc) — falls back to a self-contained HTML otherwise |
 
-Exemplos:
+Run `tumoronly doctor` to see exactly what is available.
 
-- WES/coding TMB: geralmente usar o tamanho chamavel do exoma/captura em Mb.
-- Painel: usar o tamanho real do painel em Mb.
-- WGS: defina explicitamente se quer TMB coding-like ou genome-wide; o default
-  do exemplo usa `30 Mb` para uma leitura coding-like.
+## 5. Prepare the local COSMIC database
 
-## Clonalidade
+The package **does not redistribute COSMIC**. Download the COSMIC TSV yourself and
+point the config at it. Preparation (liftover, normalization, dedup, canonical key,
+manifest) runs **once**; later analyses reuse the processed DB.
 
-O pipeline estima `ccf_estimate` usando VAF, pureza tumoral e copy number local
-quando esses campos existem. Colunas reconhecidas incluem:
-
-- pureza: `tumor_purity`, `purity`, `PURITY`, `Tumor_Purity`
-- copy number total/local: `total_cn`, `Total_CN`, `CN`, `copy_number`,
-  `local_cn`, `tcn`
-- multiplicidade da mutacao: `multiplicity`, `mutation_multiplicity`,
-  `mut_cn`, `mutation_cn`
-
-Formula usada:
-
-```text
-CCF = VAF * (purity * total_cn + (1 - purity) * normal_cn) /
-      (purity * mutation_multiplicity)
+```yaml
+cosmic:
+  raw_file: data/COSMIC_updated.tsv.gz
+  release: v99
+  source_build: GRCh37
+  target_build: GRCh38
+  cache_dir: db/cosmic
+  chain_file: reference/hg19ToHg38.over.chain.gz   # only for cross-build
 ```
 
-Se houver pureza, mas nao houver copy number, o pipeline assume regiao
-copy-neutral (`total_cn = 2`) e marca o metodo como
-`purity_adjusted_copy_neutral`. Se nao houver pureza, ele nao calcula CCF formal:
-usa apenas uma classificacao proxy por VAF (`vaf_proxy_no_purity`). Isso e
-intencional para preservar a interpretabilidade em tumor-only.
+```bash
+tumoronly prepare-cosmic --config config/example.yml
+```
 
-Classes principais:
+This writes `db/cosmic/<release>/<source>_to_<target>/` containing `cosmic_db.rds`,
+`manifest.json` (release, checksums, builds, tool versions, input/converted/unmapped/
+ref-mismatch/duplicate counts, schema) and provenance tables (`unmapped.tsv.gz`,
+`ref_mismatch.tsv.gz`, `duplicates.tsv.gz`, …). Re-running reuses the DB unless inputs
+changed (then `--force` is required). Matching later uses only the canonical key
+`BUILD|CHROM|POS|REF|ALT`.
 
-- `clonal`: CCF acima de `clonality.clonal_ccf_cutoff`.
-- `subclonal`: CCF abaixo de `clonality.subclonal_ccf_cutoff`.
-- `intermediate`: zona intermediaria.
-- `clonal_like_high_vaf` e `subclonal_like_low_vaf`: classes proxy quando nao
-  ha pureza.
+### Tumor-type-stratified COSMIC evidence
 
-Tambem sao gerados clusters simples por amostra em
-`clonality_cluster_id`, `clonality_cluster_center` e
-`clonality_cluster_label`. Para inferencia clonal definitiva, prefira integrar
-pureza/CNV de ferramentas dedicadas como ABSOLUTE, FACETS, Sequenza, PURPLE ou
-ichorCNA.
+COSMIC evidence is interpreted **in the context of the sample's tumor type**, not as
+global presence. The sample's `tumor_type`/`tumor_subtype`/`primary_site`/`histology`
+are harmonized to COSMIC categories through the **explicit, versioned** table
+`config/cosmic_tumor_type_mapping.tsv` (never fuzzy text matching). Each variant gets a
+controlled `COSMIC_TUMOR_CONTEXT_STATUS` (`exact_match`, `compatible_match`,
+`pan_cancer_recurrent`, `other_tumor_only`, `tumor_type_unknown`,
+`cosmic_tumor_type_missing`, `no_cosmic_match`), matching/other occurrence counts, and
+decomposed scores (`cosmic_genomic_match_score`, `cosmic_recurrence_score`,
+`cosmic_tumor_specificity_score`, `cosmic_total_score`). Tumor context affects
+**confidence only** — never `filter_status` automatically. Rules, weights and thresholds
+are documented in [docs/COSMIC_DECISION_RULES.md](docs/COSMIC_DECISION_RULES.md).
 
-## Figuras e maftools
+## 6. Run one sample
 
-As figuras ficam no subdiretorio `figures/` e sao listadas em
-`figure_manifest.tsv`, que tambem informa quando uma figura foi pulada. O
-arquivo `figures/somatic_maftools_input.maf` e sempre criado com variantes
-`high_confidence_somatic` e `probable_somatic`.
+```bash
+tumoronly run --config config/example.yml
+```
 
-Para gerar os plots nativos do `maftools`, instale o pacote no ambiente R usado
-pelo pipeline. Sem `maftools`, o workflow continua funcionando e gera um
-oncoplot fallback em `ggplot2`.
+## 7. Run a cohort
 
-## Tipos tumorais
+Point `input.vcf` at a multi-sample VEP VCF (or a wide annotated TSV with per-sample
+genotype columns). Cohort recurrence features are computed automatically.
 
-Para aplicar o pipeline a diferentes tumores, forneca `tumor_type` na tabela
-principal ou em `input.sample_metadata`. Use preferencialmente codigos OncoTree
-ou abreviacoes consistentes, como `UCEC`, `BRCA`, `LUAD`, `COADREAD`.
+## 8. Generate the report
 
-O pipeline sempre calcula dois sinais de recorrencia:
+The report is produced during `run`. To (re-)render:
 
-- pan-coorte: bom para detectar artefatos sistematicos e polimorfismos;
-- dentro do tipo tumoral: bom para auditar hotspots recorrentes em um contexto
-  biologico especifico.
+```bash
+tumoronly report --run-dir results/example_run
+```
 
-Mesmo quando OncoKB/COSMIC apoiam uma variante, ela continua passando pelos
-hardfilters tecnicos; validacao externa aumenta prioridade, mas nao substitui
-profundidade, VAF, qualidade de base/mapeamento e revisao de artefatos.
+## 9. Optional OncoKB annotation
 
-## Recomendacao de validacao
+```bash
+export ONCOKB_TOKEN="..."          # token ONLY via env var; never stored or logged
+tumoronly annotate-oncokb --run-dir results/example_run          # scope: retained (default) | all
+```
 
-Depois da primeira rodada, revisar no IGV um conjunto balanceado:
+This writes `tables/oncokb_annotations.tsv.gz` and **never** modifies `filter_status`.
 
-- 50 `high_confidence_somatic`
-- 50 `probable_germline`
-- 50 `probable_artifact`
-- 50 `uncertain`
-- todos os casos `validation_rescue_candidate`
+## 10. Outputs
+
+```
+results/<run_id>/
+  manifest.json            provenance, checksums, tool/package versions, counts
+  config.resolved.yml
+  logs/
+  tables/
+    variants_all.tsv.gz         every variant + full decision trail
+    variants_retained.tsv.gz    PASS / REVIEW
+    variants_excluded.tsv.gz    FAIL (kept, not dropped)
+    filter_audit.tsv.gz         per-filter definitions + counts
+    cosmic_matches.tsv.gz
+    oncokb_annotations.tsv.gz   (after annotate-oncokb)
+  maf/filtered.maf.gz           validated by maftools::read.maf
+  plots/                        maftools oncoplot + summary
+  report/tumor_only_report.html
+```
+
+## 11. Troubleshooting
+
+- **"Could not determine genome build"** → set `input.genome_build` (GRCh37/GRCh38).
+- **"Genome-build conflict"** → the config and the VCF header disagree; fix one.
+- **"no liftover backend"** → install rtracklayer (+chain) / CrossMap / liftOver, or
+  prepare COSMIC on the same build as your VCF.
+- **manifest mismatch on prepare-cosmic** → inputs changed; re-run with `--force`.
+- **OncoKB `no_token`** → export `ONCOKB_TOKEN`; the run still completes without it.
+
+## 12. Minimal complete example
+
+```bash
+tumoronly doctor
+tumoronly prepare-cosmic  --config config/example.yml
+tumoronly run             --config config/example.yml
+export ONCOKB_TOKEN="..."
+tumoronly annotate-oncokb --run-dir results/example_run
+tumoronly report          --run-dir results/example_run
+```
+
+## Public API
+
+`run_tumor_only()`, `prepare_cosmic_db()`, `annotate_oncokb()`, `create_maf()`,
+`render_tumor_only_report()`, `check_installation()`. See `docs/ARCHITECTURE.md` and
+`docs/REFACTOR_AUDIT.md` for design and rationale.
+
+## Notes on the refactor
+
+This package replaces an earlier TSV-first pipeline. De-scoped modules (semi-supervised
+ML filtering, ancestry PCA, clonality, the bespoke HTML dashboard) were moved to
+`archive/` and are **not** part of the package; see `docs/REFACTOR_AUDIT.md`. The most
+important scientific change: **OncoKB was removed from the classifier** and is now a
+post-hoc annotation only.

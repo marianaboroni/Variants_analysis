@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1450" viewBox="0 0 1600 1450" role="img" aria-labelledby="title desc">
   <title id="title">Fluxograma do pipeline tumor-only</title>
-  <desc id="desc">Fluxograma esquematico do pipeline de filtragem de variantes tumor-only, incluindo QC, filtros, scores, validacao, machine learning, TMB, clonalidade, drivers e figuras.</desc>
+  <desc id="desc">Fluxograma esquematico do pipeline de filtragem de variantes tumor-only, incluindo QC, filtros, scores, validacao, machine learning, TMB, clonalidade, drivers, ancestralidade e figuras.</desc>
   <defs>
     <style>
       .canvas { fill: #f7f9fb; }
@@ -34,7 +34,7 @@
   <rect class="canvas" x="0" y="0" width="1600" height="1450"/>
 
   <text class="title" x="800" y="70" text-anchor="middle">Pipeline tumor-only para filtragem e interpretacao de variantes</text>
-  <text class="subtitle" x="800" y="105" text-anchor="middle">Coortes brasileiras sem normal pareado e sem panel of normals: QC, filtros, ML, TMB, drivers e clonalidade</text>
+  <text class="subtitle" x="800" y="105" text-anchor="middle">Coortes brasileiras sem normal pareado e sem panel of normals: QC, filtros, ML, TMB, drivers, clonalidade e ancestralidade</text>
 
   <rect class="group" x="80" y="150" width="1440" height="190"/>
   <text class="section" x="110" y="185">ENTRADA</text>
@@ -85,11 +85,11 @@
   <rect class="box validation" x="1090" y="620" width="360" height="95"/>
   <text class="box-title" x="1270" y="650" text-anchor="middle">Validacao externa</text>
   <text class="box-text" x="1270" y="678" text-anchor="middle">OncoKB / COSMIC / hotspots</text>
-  <text class="small" x="1270" y="702" text-anchor="middle">prioriza, mas nao substitui QC</text>
+  <text class="small" x="1270" y="702" text-anchor="middle">OncoKB, COSMIC e ClinGen/ACMG</text>
 
   <rect class="box decision" x="500" y="765" width="600" height="60"/>
-  <text class="box-title" x="800" y="790" text-anchor="middle">Classificacao final tumor-only</text>
-  <text class="small" x="800" y="813" text-anchor="middle">high_confidence_somatic | probable_somatic | uncertain | probable_germline | probable_artifact | hard_filter_fail</text>
+  <text class="box-title" x="800" y="790" text-anchor="middle">Diretrizes e classificacao final tumor-only</text>
+  <text class="small" x="800" y="813" text-anchor="middle">ClinGen/CGC/VICC oncogenicidade | ACMG/AMP germinativo | classes finais</text>
 
   <path class="arrow" d="M510 258 H620"/>
   <path class="arrow" d="M980 258 H1090"/>
@@ -127,23 +127,28 @@
   <text class="box-text" x="1350" y="1030" text-anchor="middle">CCF se ha pureza/CN</text>
   <text class="small" x="1350" y="1054" text-anchor="middle">fallback por VAF quando necessario</text>
 
-  <rect class="box output" x="300" y="1135" width="450" height="85"/>
-  <text class="box-title" x="525" y="1168" text-anchor="middle">Figuras e oncoplots</text>
-  <text class="box-text" x="525" y="1196" text-anchor="middle">maftools, QC, TMB, drivers, clonalidade</text>
+  <rect class="box output" x="120" y="1135" width="390" height="85"/>
+  <text class="box-title" x="315" y="1168" text-anchor="middle">Figuras e oncoplots</text>
+  <text class="box-text" x="315" y="1196" text-anchor="middle">maftools, QC, TMB e drivers</text>
 
-  <rect class="box output" x="850" y="1135" width="450" height="85"/>
-  <text class="box-title" x="1075" y="1168" text-anchor="middle">Tabelas finais</text>
-  <text class="box-text" x="1075" y="1196" text-anchor="middle">variantes filtradas, removidas e revisao manual</text>
+  <rect class="box output" x="605" y="1135" width="390" height="85"/>
+  <text class="box-title" x="800" y="1168" text-anchor="middle">Ancestralidade</text>
+  <text class="box-text" x="800" y="1196" text-anchor="middle">SNPs autossomicos, PCA e referencia</text>
+
+  <rect class="box output" x="1090" y="1135" width="390" height="85"/>
+  <text class="box-title" x="1285" y="1168" text-anchor="middle">Tabelas finais</text>
+  <text class="box-text" x="1285" y="1196" text-anchor="middle">variantes, QC e revisao manual</text>
 
   <path class="arrow" d="M800 825 V895"/>
   <path class="arrow" d="M800 895 C800 945 270 930 270 970"/>
   <path class="arrow" d="M800 895 C800 945 630 930 630 970"/>
   <path class="arrow" d="M800 895 C800 945 990 930 990 970"/>
   <path class="arrow" d="M800 895 C800 945 1350 930 1350 970"/>
-  <path class="arrow" d="M630 1075 C630 1105 560 1105 525 1135"/>
-  <path class="arrow" d="M990 1075 C990 1105 1040 1105 1075 1135"/>
-  <path class="arrow-soft" d="M270 1075 C270 1115 385 1110 525 1135"/>
-  <path class="arrow-soft" d="M1350 1075 C1350 1115 1205 1110 1075 1135"/>
+  <path class="arrow" d="M800 895 V1135"/>
+  <path class="arrow" d="M630 1075 C630 1105 460 1105 315 1135"/>
+  <path class="arrow" d="M990 1075 C990 1105 1190 1105 1285 1135"/>
+  <path class="arrow-soft" d="M270 1075 C270 1115 290 1110 315 1135"/>
+  <path class="arrow-soft" d="M1350 1075 C1350 1115 1310 1110 1285 1135"/>
 
   <rect class="group" x="80" y="1295" width="1440" height="95"/>
   <text class="note" x="120" y="1330">Nota tumor-only:</text>
