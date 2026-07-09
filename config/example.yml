@@ -7,10 +7,17 @@ analysis:
   threads: 4
 
 input:
-  vcf: data/demo/variants.tsv  # VEP-annotated VCF (.vcf/.vcf.gz) or annotated TSV
-  delimiter: "\t"
+  path: data/demo/variants.tsv # VCF/MAF/TSV (.vcf[.gz]/.maf[.gz]/.tsv[.gz]/.txt[.gz])
+  format: auto                 # auto | vcf | maf | tsv (detected by content, not extension alone)
   genome_build: GRCh38         # prevails over the VCF header; conflict => error
   sample_metadata: data/demo/sample_metadata.tsv
+  chunk_size: null             # e.g. 100000 to read large VCFs in bounded-memory blocks
+  # column_map:                # only for custom TSVs where aliases don't match
+  #   chrom: CHROMOSOME
+  #   pos: START
+  #   ref: REF_ALLELE
+  #   alt: ALT_ALLELE
+  #   sample_id: SAMPLE
 
 reference:
   fasta: null                  # target-build FASTA, enables COSMIC REF validation
@@ -48,6 +55,28 @@ hard_filters:
   adaptive_depth_fraction: 0.35
   adaptive_q25_depth_fraction: 0.50
   missing_required_metrics_fail: false
+
+# --- adaptive per-sample filtering (EXPERIMENTAL; see docs/ADAPTIVE_FILTERING.md)
+adaptive_filtering:
+  enabled: true
+  escalate_to_review: true          # borderline-technical PASS -> REVIEW (documented)
+  hard_safety_limits:               # absolute floors; adaptive never goes below these
+    minimum_dp: 8
+    minimum_alt_depth: 2
+  depth:
+    method: percentile_mad          # percentile | robust_zscore | percentile_mad
+    percentile: 0.05
+    mad_multiplier: 3
+    absolute_floor: 8
+  alt_depth:
+    absolute_floor: 2
+    minimum_signal_to_noise: 3
+  vaf:
+    minimum_above_noise_factor: 3
+  sample_qc:
+    min_callable_fraction: 0.5
+  decision:
+    review_margin: 0.15
 
 technical_filters:
   min_depth: 20
@@ -100,6 +129,70 @@ oncokb:
   cache_dir: db/oncokb_cache
   endpoint: "https://www.oncokb.org/api/v1"
   # token comes ONLY from the ONCOKB_TOKEN environment variable
+
+# --- functional predictors (never filter; prioritization only) ---------------
+predictors:
+  detect_automatically: true
+  use_for_prioritization: true
+  use_for_filtering: false
+  mode: consensus
+  minimum_applicable_predictors: 2
+  minimum_damaging_predictors: 2     # families, not raw predictors
+  missing_policy: ignore
+  conflict_policy: report
+
+# --- overall artifact-vs-true authenticity assessment (annotation, heuristic) -
+authenticity:
+  likely_true_min: 0.66
+  likely_artifact_max: 0.40
+
+# --- Brazilian-aware population evidence (see docs/POPULATION_BRAZIL.md) -------
+population:
+  global:
+    common_af: 0.01
+    rare_af: 0.001
+  brazilian:
+    db: null                      # ABraOM/BIPMed TSV (user-provided; not redistributed)
+    name: ABraOM_SABE
+    genome_build: GRCh38          # ABraOM SABE-WGS is GRCh38; SABE-WES is GRCh37
+    common_af: 0.01
+    review_af: 0.001
+    minimum_allele_count: 2
+    cohort_size: 1171
+    escalate_to_review: true      # documented rule: possible Brazilian germline -> REVIEW
+  local_controls:
+    path: null
+    artifact_or_germline_af: 0.005
+    minimum_observations: 2
+
+# --- genetic-ancestry inference (EXPERIMENTAL; research, non-diagnostic) -------
+ancestry:
+  enabled: false
+  marker_panel:
+    path: null                    # AIMs panel TSV (canonical_key + AFR/EUR/NAT/EAS/SAS freq)
+    version: aims_v1
+    genome_build: GRCh38
+  qc:
+    minimum_depth: 10
+    minimum_alt_reads: 3
+    minimum_snps: 100
+  dominant_component_threshold: 0.80
+  admixed_minimum_secondary_component: 0.15
+
+# --- native maftools plots ----------------------------------------------------
+plots:
+  minimum_samples_for_oncoplot: 2
+  minimum_samples_for_interactions: 20
+  minimum_mutations_for_rainfall: 50
+  minimum_protein_changes_for_lollipop: 3
+  oncoplot:
+    top: 20
+    sort_by_annotation: true
+    remove_non_mutated: false
+    clinical_features:
+      - tumor_type
+      - tumor_subtype
+      - histology
 
 report:
   format: html

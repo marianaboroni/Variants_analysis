@@ -1,10 +1,14 @@
 # Hand-maintained (roxygen2 not required to load the package).
 # Public API only; all other functions are internal.
 export(run_tumor_only)
+export(read_variant_input)
 export(prepare_cosmic_db)
 export(annotate_oncokb)
 export(create_maf)
+export(create_maftools_plots)
 export(render_tumor_only_report)
+export(add_variant_authenticity)
+export(import_variant_reviews)
 export(check_installation)
 importFrom(graphics, plot.new)
 importFrom(stats, median, quantile, setNames)

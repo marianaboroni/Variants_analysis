@@ -13,6 +13,9 @@
 ^\.DS_Store$
 ^\.git$
 ^\.github$
+^\.claude$
+^\.DS_Store$
+^data/[.]DS_Store$
 ^config/wgs_.*\.yml$
 ^config/demo_config\.yml$
 ^config/example_config\.yml$

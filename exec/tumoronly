@@ -45,15 +45,33 @@ get_opt <- function(args, name, default = NULL) {
 }
 has_flag <- function(args, name) any(args == name)
 
+# resolve a function whether the package is installed (namespace) or dev-sourced (globalenv)
+resolve <- function(name) {
+  if (requireNamespace("tumoronly", quietly = TRUE) &&
+      exists(name, envir = asNamespace("tumoronly"), inherits = FALSE))
+    get(name, envir = asNamespace("tumoronly"))
+  else get(name, envir = globalenv())
+}
+
 main <- function() {
   argv <- commandArgs(trailingOnly = TRUE)
   if (length(argv) == 0) {
-    cat("Usage: tumoronly <doctor|prepare-cosmic|run|annotate-oncokb|report> [options]\n")
+    cat("Usage: tumoronly <command> [options]\n",
+        "  doctor | prepare-cosmic | run | annotate-oncokb | report\n",
+        "  prepare-ancestry-reference --config config.yml\n",
+        "  infer-ancestry --run-dir results/ID | ancestry-report --run-dir results/ID\n",
+        "  export-review-template --run-dir DIR\n",
+        "  import-reviews --file reviews.tsv [--db-dir db/variant_evidence]\n",
+        "  training-status | build-training-set --run-dir DIR | train-model |\n",
+        "  evaluate-model --model-id ID | activate-model --model-id ID --approve | rollback-model\n",
+        "    [--db-dir db/variant_evidence] [--objective P_TRUE_VARIANT]\n", sep = "")
     quit(status = 1)
   }
   cmd <- argv[1]
   args <- argv[-1]
   load_package()
+  dbdir <- get_opt(args, "--db-dir", "db/variant_evidence")
+  obj <- get_opt(args, "--objective", "P_TRUE_VARIANT")
 
   ok <- switch(cmd,
     "doctor" = { d <- check_installation(); if (isTRUE(d$ok)) 0 else 1 },
@@ -67,6 +85,47 @@ main <- function() {
       rd <- get_opt(args, "--run-dir"); if (is.null(rd)) stop("--run-dir is required")
       annotate_oncokb(rd, scope = get_opt(args, "--scope", "retained")); 0 },
     "report" = {
+      rd <- get_opt(args, "--run-dir"); if (is.null(rd)) stop("--run-dir is required")
+      render_tumor_only_report(rd); 0 },
+    "export-review-template" = {
+      rd <- get_opt(args, "--run-dir"); if (is.null(rd)) stop("--run-dir is required")
+      v <- resolve("read_variants")(file.path(rd, "tables", "variants_all.tsv.gz"), "\t")
+      resolve("export_review_template")(v, file.path(rd, "tables", "review_template.tsv"))
+      cat("Wrote", file.path(rd, "tables", "review_template.tsv"), "\n"); 0 },
+    "import-reviews" = {
+      f <- get_opt(args, "--file"); if (is.null(f)) stop("--file is required")
+      import_variant_reviews(f, db_dir = dbdir); 0 },
+    "training-status" = { resolve("ml_training_status")(dbdir); 0 },
+    "build-training-set" = {
+      rd <- get_opt(args, "--run-dir"); if (is.null(rd)) stop("--run-dir is required")
+      resolve("ml_build_training_set")(dbdir, rd, obj); 0 },
+    "train-model" = { resolve("ml_train_model")(dbdir, obj); 0 },
+    "evaluate-model" = {
+      id <- get_opt(args, "--model-id"); if (is.null(id)) stop("--model-id is required")
+      resolve("ml_evaluate_model")(dbdir, id); 0 },
+    "activate-model" = {
+      id <- get_opt(args, "--model-id"); if (is.null(id)) stop("--model-id is required")
+      resolve("ml_activate_model")(dbdir, id, approve = has_flag(args, "--approve")); 0 },
+    "rollback-model" = { resolve("ml_rollback_model")(dbdir); 0 },
+    "prepare-ancestry-reference" = {
+      cfg <- get_opt(args, "--config"); if (is.null(cfg)) stop("--config is required")
+      cc <- resolve("read_config")(cfg)
+      p <- resolve("load_aims_panel")(cc, resolve("cfg_get")(cc, c("input", "genome_build"), "GRCh38"))
+      cat(if (is.null(p)) "No AIMs panel found (set ancestry.marker_panel.path)\n"
+          else sprintf("AIMs panel OK: %d markers, version %s\n", nrow(p), attr(p, "version"))); 0 },
+    "infer-ancestry" = {
+      rd <- get_opt(args, "--run-dir"); if (is.null(rd)) stop("--run-dir is required")
+      cc <- tryCatch(resolve("read_config")(file.path(rd, "config.resolved.yml")), error = function(e) list())
+      v <- resolve("read_variants")(file.path(rd, "tables", "variants_all.tsv.gz"), "\t")
+      build <- resolve("cfg_get")(cc, c("input", "genome_build"), "GRCh38")
+      anc <- resolve("infer_ancestry")(v, cc, build)
+      resolve("write_tsv")(anc$summary, file.path(rd, "tables", "ancestry_summary.tsv"))
+      if (nrow(anc$snps) > 0) resolve("write_tsv")(anc$snps, file.path(rd, "tables", "ancestry_snps.tsv.gz"))
+      resolve("write_tsv")(anc$qc, file.path(rd, "tables", "ancestry_qc.tsv"))
+      resolve("write_tsv")(anc$projection, file.path(rd, "tables", "ancestry_projection.tsv"))
+      resolve("create_ancestry_plots")(anc, file.path(rd, "plots"), cc)
+      cat("Ancestry inference written to", file.path(rd, "tables"), "\n"); 0 },
+    "ancestry-report" = {
       rd <- get_opt(args, "--run-dir"); if (is.null(rd)) stop("--run-dir is required")
       render_tumor_only_report(rd); 0 },
     { cat(sprintf("Unknown command: %s\n", cmd)); 1 })

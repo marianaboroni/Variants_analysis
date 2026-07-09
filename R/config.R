@@ -22,12 +22,13 @@ validate_config <- function(cfg, require_input = TRUE) {
   }
 
   # --- input --------------------------------------------------------------
-  vcf <- cfg_get(cfg, c("input", "vcf"), cfg_get(cfg, c("input", "variants"), NULL))
+  vcf <- cfg_get(cfg, c("input", "path"),
+                 cfg_get(cfg, c("input", "vcf"), cfg_get(cfg, c("input", "variants"), NULL)))
   if (is.null(vcf) || is.na(vcf)) {
-    add_err("input.vcf", "missing", "path to a VEP-annotated VCF (.vcf/.vcf.gz) or annotated TSV",
-            "input:\n    vcf: data/sample.vep.vcf.gz")
+    add_err("input.path", "missing", "path to a VCF/MAF/TSV variant file",
+            "input:\n    path: data/sample.vep.vcf.gz")
   } else if (require_input && !file.exists(vcf)) {
-    add_err("input.vcf", vcf, "an existing file path", "input:\n    vcf: data/sample.vep.vcf.gz")
+    add_err("input.path", vcf, "an existing file path", "input:\n    path: data/sample.vep.vcf.gz")
   }
 
   build <- cfg_get(cfg, c("input", "genome_build"), NULL)
@@ -71,7 +72,9 @@ validate_config <- function(cfg, require_input = TRUE) {
 #' `input.variants` / `input.vcf` spellings.
 #' @keywords internal
 resolve_config <- function(cfg) {
-  cfg$input$vcf <- cfg_get(cfg, c("input", "vcf"), cfg_get(cfg, c("input", "variants"), NULL))
+  cfg$input$vcf <- cfg_get(cfg, c("input", "path"),
+                           cfg_get(cfg, c("input", "vcf"), cfg_get(cfg, c("input", "variants"), NULL)))
+  cfg$input$format <- cfg_get(cfg, c("input", "format"), "auto")
   if (is.null(cfg$analysis)) cfg$analysis <- list()
   cfg$analysis$output_dir <- cfg_get(cfg, c("analysis", "output_dir"),
                                      cfg_get(cfg, c("output", "dir"), "results"))

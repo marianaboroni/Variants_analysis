@@ -261,6 +261,79 @@ results/<run_id>/
   report/tumor_only_report.html
 ```
 
+## 10b. Input formats (VCF / MAF / TSV)
+
+One entry point, `read_variant_input()`, accepts `.vcf[.gz]`, `.maf[.gz]`,
+`.tsv[.gz]`, `.txt[.gz]`. The format is detected by **content + header** (not
+extension alone); `#`/`##` header lines are interpreted and preserved; everything
+maps to a canonical schema (CHROM/POS/END/REF/ALT/SAMPLE_ID/DP/AD_REF/AD_ALT/VAF/
+GENE/TRANSCRIPT/CONSEQUENCE/HGVSC/HGVSP/…) while **all original columns are kept**.
+An ingestion report is written to `tables/input_schema_report.tsv`.
+
+```yaml
+input:
+  path: sample.vep.vcf.gz     # or sample.maf.gz, or table.tsv.gz
+  format: auto                # auto | vcf | maf | tsv
+  chunk_size: 100000          # read large VCFs in bounded-memory blocks
+  column_map:                 # only for custom TSVs where aliases don't match
+    chrom: CHROMOSOME
+    pos: START
+    ref: REF_ALLELE
+    alt: ALT_ALLELE
+    sample_id: SAMPLE
+```
+
+- **VCF**: dynamic VEP `CSQ` parsing (field order read from the header),
+  multi-sample FORMAT extraction, predictor CSQ fields surfaced.
+- **MAF**: standard MAF columns detected; validated with `maftools::read.maf`; VAF
+  derived from `t_ref_count`/`t_alt_count` when absent.
+- **TSV** (VEP/ANNOVAR/Funcotator/custom): alias auto-detection then explicit
+  `column_map`; missing minimum fields (CHROM/POS/REF/ALT) raise an actionable error.
+
+## 10c. How the pipeline filters and prioritizes variants
+
+Filtering removes unsupported/likely-non-somatic calls; prioritization ranks what
+remains. Full table with fields, strategy and effect per stage:
+[docs/FILTERING_STRATEGY.md](docs/FILTERING_STRATEGY.md).
+
+- Technical QC (FILTER/QUAL/DP/AD/VAF/TLOD/MBQ/MMQ) — **can exclude**.
+- Artifact evidence (PoN, strand/orientation bias, clustered, weak) — **can exclude**.
+- Population frequency (gnomAD/ExAC/1000G/ABraOM) — **can exclude/flag** as germline.
+- Consequence, functional predictors, driver/hotspot, COSMIC — **prioritize** (do not
+  filter). `PRIORITY_SCORE_BASE` is decomposed into consequence/computational/hotspot/
+  driver/clinical/cosmic_global components (all exported; weights heuristic).
+- SIFT/PolyPhen/REVEL/CADD/AlphaMissense/SpliceAI **never remove a variant on their own**.
+
+## 10d. Functional predictors
+
+Registry-driven (`inst/config/predictor_registry.yml`); rules in
+[docs/PREDICTOR_RULES.md](docs/PREDICTOR_RULES.md), audit in
+[docs/PREDICTOR_AUDIT.md](docs/PREDICTOR_AUDIT.md). Detected dynamically
+(`tables/predictor_inventory.tsv`), normalized to canonical `*_SCORE`/`*_PRED`,
+gated by consequence applicability, and combined with a **family-aware consensus**
+into `COMPUTATIONAL_EVIDENCE_*` (correlated predictors like SIFT+PolyPhen count as
+one family). Missing predictors are `applicable_but_missing`, never benign.
+
+## 10e. How to interpret why a variant was retained or excluded
+
+Per-variant columns (all in `variants_all.tsv.gz`):
+
+| column | meaning |
+|---|---|
+| `filter_status` | PASS / REVIEW / FAIL (the decision) |
+| `filters_passed` / `filters_failed` | which named filters passed/failed |
+| `filter_reasons` | human-readable combined reasons |
+| `final_class` | conservative class (somatic/germline/artifact/…) |
+| `CONFIDENCE_SCORE_BASE` / `CONFIDENCE_CATEGORY_BASE` | main confidence (no COSMIC context) |
+| `PRIORITY_SCORE_BASE` / `PRIORITY_CATEGORY` / `PRIORITY_COMPONENTS` | ranking + decomposition |
+| `COMPUTATIONAL_EVIDENCE_CATEGORY` | predictor consensus (support/conflicting/insufficient/not_applicable) |
+| `COSMIC_TUMOR_CONTEXT_STATUS` / `COSMIC_CONTEXT_SUPPORT_SCORE` | tumor-context COSMIC (experimental) |
+
+Examples: a low-depth/strand-biased call → `FAIL` (technical); a high-population-AF
+variant → `FAIL`/germline; SIFT+PolyPhen conflict → retained with
+`COMPUTATIONAL_CONFLICT_FLAG`; COSMIC only in other tumors → `other_tumor_only`
+(global evidence only, no OS4/OM4). See [docs/REPORT_GUIDE.md](docs/REPORT_GUIDE.md).
+
 ## 11. Troubleshooting
 
 - **"Could not determine genome build"** → set `input.genome_build` (GRCh37/GRCh38).

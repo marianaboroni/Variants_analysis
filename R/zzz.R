@@ -13,5 +13,8 @@ utils::globalVariables(c(
   "locus_n_samples", "variant_tumor_type_freq", "variant_tumor_type_n_samples",
   "tumor_type_total_samples", "locus_tumor_type_freq",
   "variant_median_vaf", "variant_median_dp", "variant_median_alt_count",
-  "locus_tumor_type_n_samples", "total_samples"
+  "locus_tumor_type_n_samples", "total_samples",
+  # ggplot2 aes() symbols used in ancestry/QC plots
+  "stage", "n", "reason", "PC1", "PC2", "proportion", "component", "vaf", "chrom",
+  "ANCESTRY_CALL_RATE", "ANCESTRY_CONFIDENCE", "sample_id"
 ))

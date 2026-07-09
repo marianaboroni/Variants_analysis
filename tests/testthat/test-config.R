@@ -1,6 +1,6 @@
 test_that("config validation reports missing input with an actionable message", {
   expect_error(validate_config(list(analysis = list(output_dir = "x")), require_input = FALSE),
-               "input.vcf", ignore.case = TRUE)
+               "input", ignore.case = TRUE)
 })
 
 test_that("config validation rejects an invalid genome build", {

@@ -92,6 +92,52 @@ confidence_category_from <- function(status, final_class, score) {
   cat
 }
 
+#' Add the simplified, unified interface labels. Four DISTINCT concepts, never
+#' conflated: STATUS (technical/filtering decision), PRIORITY (biological
+#' interest), EVIDENCE (computational predictor consensus), AUTHENTICITY
+#' (technical real-vs-artifact). Detail stays in the *_reason columns.
+#' @keywords internal
+add_unified_labels <- function(x) {
+  n <- nrow(x)
+  gv <- function(col, d = NA_character_) if (col %in% names(x)) as.character(x[[col]]) else rep(d, n)
+
+  x$STATUS <- gv("filter_status", "REVIEW")   # PASS / REVIEW / FAIL
+
+  pc <- gv("PRIORITY_CATEGORY", "")
+  prio <- c(high = "HIGH", moderate = "MEDIUM", low = "LOW", very_low = "NOT_PRIORITIZED")[pc]
+  prio[is.na(prio)] <- "NOT_PRIORITIZED"
+  prio[x$STATUS == "FAIL"] <- "NOT_PRIORITIZED"   # excluded variants are not prioritized
+  x$PRIORITY <- unname(prio)
+
+  ec <- gv("COMPUTATIONAL_EVIDENCE_CATEGORY", "")
+  ev <- c(strong_support = "STRONG", moderate_support = "MODERATE", weak_support = "WEAK",
+          conflicting = "CONFLICTING", insufficient = "INSUFFICIENT",
+          not_applicable = "NOT_APPLICABLE")[ec]
+  ev[is.na(ev)] <- "INSUFFICIENT"
+  x$EVIDENCE <- unname(ev)
+
+  x$AUTHENTICITY <- gv("VARIANT_AUTHENTICITY_CATEGORY", "UNCERTAIN")  # LIKELY_TRUE/UNCERTAIN/LIKELY_ARTIFACT
+
+  # detail / reason columns (kept out of the four primary labels)
+  x$status_reason <- gv("filter_reasons", "")
+  x$failed_filters <- gv("filters_failed", "")
+  x$priority_reasons <- gv("PRIORITY_COMPONENTS", "")
+  x$evidence_summary <- gv("COMPUTATIONAL_EVIDENCE_DETAILS", "")
+  # why a variant warrants human review (technical/biological conflict, etc.)
+  conflict_pred <- if ("COMPUTATIONAL_CONFLICT_FLAG" %in% names(x)) x$COMPUTATIONAL_CONFLICT_FLAG %in% c(TRUE, "TRUE") else rep(FALSE, n)
+  bio_hi_tech_lo <- suppressWarnings(as.numeric(gv("BIOLOGICAL_SUPPORT_SCORE", "0"))) >= 0.5 &
+    suppressWarnings(as.numeric(gv("TECHNICAL_AUTHENTICITY_SCORE", "1"))) < 0.5
+  x$review_reasons <- mapply(function(st, auth, cp, bt) {
+    r <- character()
+    if (identical(st, "REVIEW")) r <- c(r, "flagged_for_review")
+    if (identical(auth, "LIKELY_ARTIFACT")) r <- c(r, "technical_artifact_evidence")
+    if (isTRUE(cp)) r <- c(r, "conflicting_predictors")
+    if (isTRUE(bt)) r <- c(r, "biologically_interesting_but_technically_weak")
+    if (length(r) == 0) "" else paste(r, collapse = ";")
+  }, x$STATUS, x$AUTHENTICITY, conflict_pred, bio_hi_tech_lo, USE.NAMES = FALSE)
+  x
+}
+
 #' Split the annotated table into retained / excluded views (no data loss:
 #' both are subsets of variants_all).
 #' @keywords internal

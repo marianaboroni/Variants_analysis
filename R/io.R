@@ -100,7 +100,15 @@ add_info_annotations <- function(x, csq_fields, ann_fields) {
     x$HGVSp <- first_nonmissing_annotation(csq, c("HGVSp", "Protein_position", "Amino_acids"))
     x$Existing_variation <- first_nonmissing_annotation(csq, c("Existing_variation"))
     x$CLINVAR_SIG <- first_nonmissing_annotation(csq, c("CLIN_SIG", "ClinVar_CLNSIG"))
+    x$CLIN_SIG <- first_nonmissing_annotation(csq, c("CLIN_SIG"))
     x$gnomADe_AF <- to_numeric_safe(first_nonmissing_annotation(csq, c("gnomADe_AF", "gnomADg_AF", "gnomAD_AF", "MAX_AF")))
+    # Surface ALL predictor CSQ fields present (dynamic, from the registry) plus
+    # transcript/population fields, from the first/most-severe VEP annotation, so
+    # EVERY predictor that exists is available to the predictor layer + MAF export.
+    pred_aliases <- tryCatch(predictor_alias_union(), error = function(e) character())
+    surface <- unique(c(pred_aliases, "IMPACT", "HGVSc", "EXON", "INTRON", "Feature",
+                 "CANONICAL", "MANE_SELECT", "BIOTYPE", "Amino_acids", "gnomADg_AF", "MAX_AF"))
+    for (f in intersect(surface, csq_fields)) if (!(f %in% names(x))) x[[f]] <- csq[[f]]
   }
 
   if (any(!is.na(x$ANN)) && length(ann_fields) > 0) {

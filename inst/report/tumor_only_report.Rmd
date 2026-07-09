@@ -6,177 +6,196 @@ output:
   html_document:
     toc: true
     toc_float: true
-    df_print: paged
     self_contained: true
+    theme: flatly
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 run_dir <- params$run_dir
-read_tbl <- function(name) {
-  p <- file.path(run_dir, "tables", name)
-  if (file.exists(p)) data.table::fread(p, sep = "\t", data.table = FALSE, na.strings = c("", ".", "NA")) else NULL
-}
+`%||%` <- function(a, b) if (is.null(a) || length(a) == 0) b else a
+rd <- function(name) { p <- file.path(run_dir, "tables", name)
+  if (file.exists(p)) as.data.frame(data.table::fread(p, sep = "\t", na.strings = c("", ".", "NA"))) else NULL }
 manifest <- tryCatch(jsonlite::read_json(file.path(run_dir, "manifest.json"), simplifyVector = TRUE),
                      error = function(e) list())
-oncokb <- read_tbl("oncokb_annotations.tsv.gz")
-variants_all <- read_tbl("variants_all.tsv.gz")
-retained <- read_tbl("variants_retained.tsv.gz")
-excluded <- read_tbl("variants_excluded.tsv.gz")
-audit <- read_tbl("filter_audit.tsv.gz")
-cosmic <- read_tbl("cosmic_matches.tsv.gz")
-g <- function(x, d = "NA") if (is.null(x) || length(x) == 0) d else x
+v_all <- rd("variants_all.tsv.gz"); audit <- rd("filter_audit.tsv.gz")
+retained <- rd("variants_retained.tsv.gz"); excluded <- rd("variants_excluded.tsv.gz")
+top <- rd("top_prioritized_variants.tsv"); inv <- rd("predictor_inventory.tsv")
+conf <- rd("predictor_conflicts.tsv"); ctx <- rd("cosmic_context_matches.tsv")
+schema <- rd("input_schema_report.tsv"); oncokb <- rd("oncokb_annotations.tsv.gz")
+plotman <- tryCatch(as.data.frame(data.table::fread(file.path(run_dir, "plots", "plot_manifest.tsv"))),
+                    error = function(e) NULL)
+has_dt <- requireNamespace("DT", quietly = TRUE)
+g <- function(x, d = "NA") if (is.null(x) || length(x) == 0 || is.na(x[1])) d else x[1]
+cnt <- function(cond) if (is.null(v_all) || !length(cond)) 0 else sum(cond, na.rm = TRUE)
+n_input <- g(manifest$n_input_variants, if (!is.null(v_all)) nrow(v_all) else 0)
+n_ret <- if (!is.null(retained)) nrow(retained) else 0
+n_exc <- if (!is.null(excluded)) nrow(excluded) else 0
+n_rev <- cnt(v_all$filter_status == "REVIEW")
+n_high <- if (!is.null(v_all) && "PRIORITY_CATEGORY" %in% names(v_all)) cnt(v_all$PRIORITY_CATEGORY == "high") else 0
+n_hot <- if (!is.null(v_all) && "hotspot_match" %in% names(v_all)) cnt(v_all$hotspot_match %in% c(TRUE, "TRUE")) else 0
+n_comp <- if (!is.null(v_all) && "COMPUTATIONAL_EVIDENCE_CATEGORY" %in% names(v_all)) cnt(v_all$COMPUTATIONAL_EVIDENCE_CATEGORY %in% c("strong_support","moderate_support")) else 0
+n_conf <- if (!is.null(conf)) nrow(conf) else 0
+n_ctx_same <- if (!is.null(ctx) && "COSMIC_TUMOR_CONTEXT_STATUS" %in% names(ctx)) sum(ctx$COSMIC_TUMOR_CONTEXT_STATUS %in% c("exact_match","compatible_match","pan_cancer_with_sample_tumor"), na.rm = TRUE) else 0
+n_artifact <- if (!is.null(v_all) && "VARIANT_AUTHENTICITY_CATEGORY" %in% names(v_all)) cnt(v_all$VARIANT_AUTHENTICITY_CATEGORY == "likely_artifact") else 0
+n_true <- if (!is.null(v_all) && "VARIANT_AUTHENTICITY_CATEGORY" %in% names(v_all)) cnt(v_all$VARIANT_AUTHENTICITY_CATEGORY == "likely_true") else 0
+card <- function(label, value, color = "#2c7fb8") sprintf(
+  "<div style='display:inline-block;min-width:150px;margin:6px;padding:12px 16px;border-radius:10px;background:%s;color:#fff;text-align:center'><div style='font-size:26px;font-weight:700'>%s</div><div style='font-size:12px;opacity:.9'>%s</div></div>",
+  color, value, label)
 ```
 
-## 1. Execution summary
+# Executive summary {-}
 
-- **Run id:** `r g(manifest$run_id)`
-- **Date:** `r g(manifest$date)`
-- **Package version:** `r g(manifest$package_version)`
-- **Genome build:** `r g(manifest$genome_build)`
-- **Reference FASTA:** `r g(manifest$fasta_file)`
-- **COSMIC release:** `r g(manifest$cosmic_release)`
-- **Input:** `r g(manifest$input_file)` (`r g(manifest$n_input_variants)` variants)
-- **OncoKB annotation:** `r if (is.null(oncokb)) "not run" else "present (annotation only — does not affect filtering)"`
-- **Runtime (s):** `r g(manifest$runtime_seconds)`
+```{r, results='asis'}
+cat("<div>",
+  card("Input variants", n_input, "#34495e"),
+  card("Retained", n_ret, "#27ae60"),
+  card("Excluded", n_exc, "#c0392b"),
+  card("Manual review", n_rev, "#e67e22"),
+  card("High priority", n_high, "#8e44ad"),
+  card("In hotspots", n_hot, "#16a085"),
+  card("Computational support", n_comp, "#2980b9"),
+  card("COSMIC same-tumor", n_ctx_same, "#d35400"),
+  card("Likely true", n_true, "#1e8449"),
+  card("Likely artifact", n_artifact, "#7f8c8d"),
+  "</div>", sep = "\n")
+```
 
-## 2. Provenance
+**Run:** `r g(manifest$run_id)` &nbsp;|&nbsp; **Build:** `r g(manifest$genome_build)` &nbsp;|&nbsp;
+**Input format:** `r g(manifest$input_format)` &nbsp;|&nbsp; **COSMIC:** `r g(manifest$cosmic_release)` &nbsp;|&nbsp;
+**OncoKB:** `r if (is.null(oncokb)) "not run" else "annotation only (does not affect filtering)"` &nbsp;|&nbsp;
+**Package:** `r g(manifest$package_version)`
 
-- **Input SHA-256:** `r g(manifest$input_sha256)`
-- **R version:** `r g(manifest$r_version)`
-- **Key packages:** `r paste(names(unlist(manifest$packages)), unlist(manifest$packages), sep = "=", collapse = ", ")`
+## Principais achados
+
+```{r, results='asis'}
+findings <- c(
+  sprintf("- **%d** variant(s) classified as **high priority**.", n_high),
+  sprintf("- **%d** variant(s) in known **hotspots**.", n_hot),
+  sprintf("- **%d** variant(s) with concordant **computational support** from multiple predictors.", n_comp),
+  sprintf("- **%d** variant(s) with **conflicting** predictor evidence (e.g. SIFT vs PolyPhen).", n_conf),
+  sprintf("- **%d** variant(s) with COSMIC recurrence in the **same tumor context**.", n_ctx_same),
+  sprintf("- **%d** variant(s) assessed as **likely true** and **%d** as **likely artifact** (authenticity score).", n_true, n_artifact),
+  sprintf("- **%d** variant(s) require **manual review** (uncertain / possible germline).", n_rev))
+cat(paste(findings, collapse = "\n"))
+```
+
+## Alerts
+
+```{r, results='asis'}
+alerts <- character()
+add_alert <- function(cond, msg) if (isTRUE(cond)) alerts[[length(alerts) + 1]] <<- msg
+add_alert(is.na(g(manifest$genome_build, NA)), "Genome build could not be confirmed.")
+add_alert(n_ret == 0, "No variants were retained.")
+add_alert(is.null(manifest$cosmic_release) || is.na(g(manifest$cosmic_release, NA)), "No COSMIC database configured — COSMIC evidence unavailable.")
+if (!is.null(schema)) { miss <- schema[schema$required & !schema$present, "canonical_field"]
+  add_alert(length(miss) > 0, paste("Missing required canonical field(s):", paste(miss, collapse = ", "))) }
+if (!is.null(inv)) { det <- sum(inv$status == "detected", na.rm = TRUE)
+  add_alert(det == 0, "No functional predictors were detected in the input.") }
+if (!is.null(v_all) && "COSMIC_CONTEXT_EVALUABLE" %in% names(v_all))
+  add_alert(any(v_all$COSMIC_MATCH %in% c(TRUE,"TRUE")) && all(!(v_all$COSMIC_CONTEXT_EVALUABLE %in% c(TRUE,"TRUE"))),
+            "COSMIC matches present but tumor context is not evaluable (no/unmapped tumor type).")
+if (!is.null(plotman)) { sk <- plotman[plotman$status == "skipped", ]
+  if (nrow(sk)) for (i in seq_len(nrow(sk))) add_alert(TRUE, sprintf("Plot '%s' not generated: %s", sk$plot[i], sk$reason[i])) }
+if (length(alerts) == 0) cat("_No critical alerts._\n") else
+  cat(paste(sprintf("- ⚠️ %s", alerts), collapse = "\n"))
+```
+
+# Top prioritized variants
+
+*What this shows:* the highest-priority retained variants for review. *How to
+interpret:* priority is a decomposed heuristic score (consequence + computational
++ hotspot + driver + clinical + COSMIC global); it ranks, it does not filter.
 
 ```{r}
-utils::sessionInfo()$R.version$version.string
+if (!is.null(top) && nrow(top) > 0) {
+  show <- utils::head(top, 200)
+  if (has_dt) DT::datatable(show, filter = "top", rownames = FALSE,
+    extensions = "Buttons", options = list(pageLength = 15, scrollX = TRUE,
+      dom = "Bfrtip", buttons = c("copy", "csv")), class = "compact stripe")
+  else knitr::kable(utils::head(show, 50))
+} else "No retained variants to prioritize."
 ```
 
-## 3. Input QC
+# Details {.tabset}
+
+## Data quality
 
 ```{r}
-if (!is.null(variants_all)) {
-  num <- function(col) if (col %in% names(variants_all)) suppressWarnings(as.numeric(variants_all[[col]])) else NA_real_
-  data.frame(
-    metric = c("n variants", "median DP", "median VAF", "% missing gene",
-               "% missing consequence", "n distinct samples"),
-    value = c(nrow(variants_all),
-              round(stats::median(num("dp"), na.rm = TRUE), 1),
-              round(stats::median(num("vaf"), na.rm = TRUE), 3),
-              round(100 * mean(is.na(variants_all$gene) | variants_all$gene == ""), 1),
-              round(100 * mean(is.na(variants_all$consequence) | variants_all$consequence == ""), 1),
-              length(unique(variants_all$sample_id))))
-}
+if (!is.null(schema)) { if (has_dt) DT::datatable(schema, rownames = FALSE, options = list(pageLength = 10, scrollX = TRUE)) else knitr::kable(schema) }
 ```
 
-## 4. Filtering funnel
+## Filtering funnel
 
-Every variant is retained in `variants_all` with its full decision trail; the
-counts below are views, not deletions.
+*What this shows:* how many variants pass each stage. Nothing is deleted — excluded
+variants remain in `variants_all` with their full decision trail.
 
 ```{r}
-audit
+if (!is.null(audit)) knitr::kable(audit)
 ```
 
-## 5. Retained variants
+## Functional predictors
+
+*What this shows:* which in-silico predictors were detected and their coverage.
+*How to interpret:* predictors estimate possible functional impact but must not be
+read in isolation as evidence of pathogenicity; they never remove a variant.
 
 ```{r}
-if (!is.null(retained) && nrow(retained) > 0) {
-  cols <- intersect(c("sample_id","gene","protein_change","consequence","vaf","dp",
-    "max_pop_af","COSMIC_EVIDENCE_SUMMARY","confidence_category","confidence_score",
-    "final_class","driver_class","filter_reasons"), names(retained))
-  retained[, cols, drop = FALSE]
-} else "No retained variants."
+if (!is.null(inv)) { if (has_dt) DT::datatable(inv, rownames = FALSE, options = list(pageLength = 10, scrollX = TRUE)) else knitr::kable(inv) }
 ```
 
-## 6. Excluded variants
+```{r, results='asis'}
+if (!is.null(conf) && nrow(conf) > 0) cat(sprintf("\n**%d variant(s) with conflicting predictors** (see tables/predictor_conflicts.tsv).\n", nrow(conf)))
+```
+
+## COSMIC evidence
+
+*What this shows:* global COSMIC recurrence (across all tumor types) vs contextual
+recurrence (same/compatible tumor type). *How to interpret:* global recurrence is
+informational; only tumor-context matches inform OS4/OM4. The contextual score is
+**experimental** — the main output uses `CONFIDENCE_SCORE_BASE`.
+
+```{r}
+if (!is.null(ctx) && nrow(ctx) > 0) { if (has_dt) DT::datatable(utils::head(ctx, 200), rownames = FALSE, options = list(pageLength = 10, scrollX = TRUE)) else knitr::kable(utils::head(ctx, 50)) } else "No COSMIC matches."
+```
+
+## maftools visualizations
+
+```{r, results='asis'}
+if (!is.null(plotman)) {
+  ok <- plotman[plotman$status == "ok", ]
+  for (i in seq_len(nrow(ok))) {
+    fs <- strsplit(ok$files[i], ";", fixed = TRUE)[[1]]
+    png <- fs[grepl("[.]png$", fs)]
+    if (length(png)) cat(sprintf("\n### %s\n\n![](%s)\n\n", ok$plot[i], png[1]))
+    else cat(sprintf("\n### %s — %s\n", ok$plot[i], paste(basename(fs), collapse = ", ")))
+  }
+} else cat("No maftools plots produced.\n")
+```
+
+## Excluded variants
 
 ```{r}
 if (!is.null(excluded) && nrow(excluded) > 0) {
-  cols <- intersect(c("sample_id","gene","protein_change","consequence",
-    "final_class","filter_status","filters_failed","filter_reasons"), names(excluded))
-  excluded[, cols, drop = FALSE]
+  cols <- intersect(c("sample_id","gene","consequence","final_class","filter_status","filters_failed","filter_reasons"), names(excluded))
+  ex <- excluded[, cols, drop = FALSE]
+  if (has_dt) DT::datatable(utils::head(ex, 500), filter = "top", rownames = FALSE, options = list(pageLength = 10, scrollX = TRUE)) else knitr::kable(utils::head(ex, 50))
 } else "No excluded variants."
 ```
 
-## 7. Visualizations
-
-```{r, results='asis'}
-onco <- file.path(run_dir, "plots", "oncoplot_top_genes.pdf")
-if (file.exists(onco)) cat(sprintf("Oncoplot (maftools): [%s](%s)\n\n", basename(onco), onco)) else
-  cat("Oncoplot not produced (insufficient retained variants or maftools unavailable).\n\n")
-```
-
-## 7a. Evidência COSMIC global
-
-Global COSMIC recurrence across ALL tumor types (a transformed raw recurrence
-count, not a frequency). Global evidence is informative but is **not** somatic
-support in the analyzed tumor and does **not** grant OS4/OM4.
+## Provenance & parameters
 
 ```{r}
-if (!is.null(cosmic) && nrow(cosmic) > 0 && "COSMIC_TOTAL_OCCURRENCES" %in% names(cosmic)) {
-  gcols <- intersect(c("sample_id","gene","COSMIC_TOTAL_OCCURRENCES",
-    "COSMIC_GLOBAL_RECURRENCE_SCORE","COSMIC_GLOBAL_RECURRENT",
-    "COSMIC_GLOBAL_PANCANCER_RECURRENT","COSMIC_GLOBAL_EVIDENCE_ONLY"), names(cosmic))
-  head(cosmic[, gcols, drop = FALSE], 300)
-} else "No COSMIC matches."
+knitr::kable(data.frame(field = names(unlist(manifest)), value = as.character(unlist(manifest))))
 ```
 
-## 7b. Evidência COSMIC no contexto do tipo tumoral
-
-COSMIC evidence stratified by the sample's tumor type. Occurrences in the sample's
-(harmonized) tumor type are separated from those in other tumor types; raw counts
-are interpreted with a base-size-aware transform and are **not** compared directly
-across tumor types. OS4/OM4 are granted only from tumor-context occurrences. See
-`docs/COSMIC_DECISION_RULES.md` and `docs/COSMIC_OS4_OM4_AUDIT.md`.
-
-```{r}
-if (!is.null(cosmic) && nrow(cosmic) > 0) {
-  by_status <- as.data.frame(table(cosmic$COSMIC_TUMOR_CONTEXT_STATUS))
-  names(by_status) <- c("tumor_context_status", "n_variants")
-  by_status
-} else "No COSMIC matches (no processed COSMIC database configured, or no genomic matches)."
-```
-
-```{r}
-if (!is.null(cosmic) && nrow(cosmic) > 0) {
-  cols <- intersect(c("sample_id","gene","tumor_type","tumor_subtype",
-    "COSMIC_TUMOR_CONTEXT_STATUS","COSMIC_MATCH_LEVEL","COSMIC_CONTEXT_EVALUABLE",
-    "COSMIC_CONTEXT_INTERPRETATION","COSMIC_MATCHING_TUMOR_OCCURRENCES",
-    "COSMIC_OTHER_TUMOR_OCCURRENCES","COSMIC_MATCHED_TUMOR_RECURRENCE_SCORE",
-    "COSMIC_TUMOR_SPECIFICITY_SCORE","COSMIC_CONTEXT_SUPPORT_SCORE",
-    "OS4_CONTEXTUAL","OM4_CONTEXTUAL","COSMIC_GLOBAL_EVIDENCE_ONLY",
-    "COSMIC_PANCANCER_INCLUDES_SAMPLE_TUMOR","COSMIC_TUMOR_CONTEXT_REASON"), names(cosmic))
-  head(cosmic[, cols, drop = FALSE], 300)
-}
-```
-
-The COSMIC context score (`COSMIC_CONTEXT_SUPPORT_SCORE`) is **experimental /
-complementary**. Main filtering and confidence use `CONFIDENCE_SCORE_BASE`, which
-does not include tumor-context COSMIC evidence.
-
-```{r, results='asis'}
-if (!is.null(cosmic) && nrow(cosmic) > 0) {
-  unk <- sum(cosmic$COSMIC_TUMOR_CONTEXT_STATUS == "tumor_type_unknown", na.rm = TRUE)
-  miss <- sum(cosmic$COSMIC_TUMOR_CONTEXT_STATUS == "cosmic_tumor_type_missing", na.rm = TRUE)
-  if (unk > 0) cat(sprintf("- **Alert:** %d matched variant(s) from samples whose tumor type could not be harmonized.\n", unk))
-  if (miss > 0) cat(sprintf("- **Alert:** %d COSMIC record(s) lacked tumor-context information.\n", miss))
-  cat("- **Bias note:** COSMIC representation is uneven across tumor types; absence in a tumor type does not exclude relevance, and cross-tumor counts are not directly comparable.\n")
-}
-```
-
-## 8. OncoKB annotation (confirmatory only)
-
-```{r}
-if (!is.null(oncokb)) {
-  cols <- intersect(c("sample_id","gene","ONCOKB_ONCOGENIC","ONCOKB_MUTATION_EFFECT",
-    "ONCOKB_HIGHEST_LEVEL","ONCOKB_QUERY_STATUS"), names(oncokb))
-  head(oncokb[, cols, drop = FALSE], 200)
-} else "OncoKB annotation was not run. It is optional and never affects filtering."
-```
-
-## 9. Limitations
+# Limitations {-}
 
 - Tumor-only analysis **cannot definitively distinguish somatic from germline** variants.
-- **Presence in COSMIC is supporting evidence** of recurrence, not proof of somaticity.
-- **Absence from COSMIC does not exclude** clinical or biological relevance.
-- **OncoKB was used only as a confirmatory annotation** and never changed any filtering decision.
-- Results must be reviewed by qualified professionals. This pipeline is **not a validated clinical test**.
+- Functional predictors are **supporting evidence only** and never remove a variant.
+- COSMIC **global** recurrence is informational; **contextual** COSMIC evidence and the
+  `COSMIC_CONTEXT_SUPPORT_SCORE` are **experimental**.
+- OS4/OM4 tumor-context gating and priority weights are **heuristic**, not clinically validated.
+- OncoKB (if run) is a confirmatory annotation and never changes filtering.
+- Results require review by qualified professionals. This is **not a validated clinical test**.
+```
