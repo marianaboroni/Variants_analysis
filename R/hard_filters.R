@@ -28,7 +28,7 @@ compute_sample_qc_from_variants <- function(x, cfg) {
     idx <- split_idx[[sample_id]]
     dp <- x$dp[idx]
     filter_status <- x$filter_status[idx]
-    pass_filter <- is.na(filter_status) | filter_status %in% c("PASS", ".", "NA") | filter_status == ""
+    pass_filter <- caller_filter_pass(filter_status, cfg)
     data.frame(
       sample_id = sample_id,
       tumor_type = unique(x$tumor_type[idx])[1],
@@ -163,7 +163,13 @@ apply_variant_hard_filters <- function(x, cfg) {
   missing_required_fail <- isTRUE(cfg_get(cfg, c("hard_filters", "missing_required_metrics_fail"), FALSE))
   min_alt <- ifelse(x$is_indel, x$hard_min_alt_count_indel, x$hard_min_alt_count_snv)
   min_af <- ifelse(x$is_indel, x$hard_min_af_indel, x$hard_min_af_snv)
-  pass_filter <- is.na(x$filter_status) | x$filter_status %in% c("PASS", ".", "NA") | x$filter_status == ""
+  # Caller FILTER values that pass this technical gate. Defaults to "PASS"
+  # only (backward compatible); a Mutect2 tumor-only analysis can additionally
+  # accept "germline"/"panel_of_normals"/combinations here so those variants
+  # reach population/oncogenic scoring instead of being forced to
+  # technical_fail before that evidence is even considered (see
+  # docs/FILTERING_STRATEGY.md, "Caller FILTER as graded evidence").
+  pass_filter <- caller_filter_pass(x$filter_status, cfg)
 
   depth_fail <- ifelse(is.na(x$dp), missing_required_fail, x$dp < x$hard_min_depth)
   alt_fail <- ifelse(is.na(x$alt_count), missing_required_fail, x$alt_count < min_alt)

@@ -58,6 +58,8 @@ main <- function() {
   if (length(argv) == 0) {
     cat("Usage: tumoronly <command> [options]\n",
         "  doctor | prepare-cosmic | run | annotate-oncokb | report\n",
+        "  build-cosmic-input --config config.yml [--force]   (build cosmic.raw_file from raw COSMIC v104 files)\n",
+        "  prepare-abraom      --config config.yml [--force]   (build population.brazilian.db from an ANNOVAR TSV)\n",
         "  prepare-ancestry-reference --config config.yml\n",
         "  infer-ancestry --run-dir results/ID | ancestry-report --run-dir results/ID\n",
         "  export-review-template --run-dir DIR\n",
@@ -78,6 +80,16 @@ main <- function() {
     "prepare-cosmic" = {
       cfg <- get_opt(args, "--config"); if (is.null(cfg)) stop("--config is required")
       prepare_cosmic_db(cfg, force = has_flag(args, "--force")); 0 },
+    "build-cosmic-input" = {
+      cfg <- get_opt(args, "--config"); if (is.null(cfg)) stop("--config is required")
+      res <- build_cosmic_raw_input(cfg, force = has_flag(args, "--force"))
+      cat("COSMIC flat input:", res$raw_file_path, "\n",
+          "Set this as cosmic.raw_file before running prepare-cosmic.\n"); 0 },
+    "prepare-abraom" = {
+      cfg <- get_opt(args, "--config"); if (is.null(cfg)) stop("--config is required")
+      res <- prepare_brazilian_db(cfg, force = has_flag(args, "--force"))
+      cat("Brazilian population DB:", res$db_path, "\n",
+          "Set this as population.brazilian.db before running `run`.\n"); 0 },
     "run" = {
       cfg <- get_opt(args, "--config"); if (is.null(cfg)) stop("--config is required")
       run_tumor_only(cfg, run_id = get_opt(args, "--run-id")); 0 },

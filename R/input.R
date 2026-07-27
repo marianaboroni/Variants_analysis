@@ -25,9 +25,17 @@ CHR1_LENGTH <- c(GRCh37 = 249250621L, GRCh38 = 248956422L)
 #' \dontrun{
 #' res <- read_variant_input("data/sample.vep.vcf.gz")
 #' head(res$variants); res$schema_report
+#'
+#' # cohort: one row per (variant, sample) across every file, so cohort-wide
+#' # recurrence (compute_cohort_recurrence()) is meaningful without a manual
+#' # `bcftools merge` step first.
+#' res <- read_variant_input(c("data/s1.vep.vcf.gz", "data/s2.vep.vcf.gz"))
 #' }
 read_variant_input <- function(path, format = "auto", sample_metadata = NULL,
                                column_map = NULL, chunk_size = NULL) {
+  if (length(path) > 1)
+    return(read_variant_input_cohort(path, format = format, column_map = column_map,
+                                      chunk_size = chunk_size))
   if (!file.exists(path)) stop("Input file not found: ", path, call. = FALSE)
   fmt <- detect_input_format(path, format)
   hb <- read_header_block(path)
@@ -67,6 +75,49 @@ read_variant_input <- function(path, format = "auto", sample_metadata = NULL,
   attr(variants, "column_mapping") <- built$mapping
   list(variants = variants, format = fmt, header_metadata = header_meta,
        schema_report = report, column_mapping = built$mapping)
+}
+
+#' Ingest a cohort given as multiple single-sample files (typically one VCF
+#' per Mutect2 tumor-only sample) as one combined variant table.
+#'
+#' Each file is ingested independently through [read_variant_input()] (its own
+#' format detection, its own column mapping — files are never assumed to share
+#' a layout) and the canonical tables are row-bound. Sample identity comes from
+#' whatever `read_variant_input()` already assigns per file (the tumor genotype
+#' column name for a single-sample VCF with a FORMAT block, the file's basename
+#' otherwise — see `expand_vcf_samples()`), so no cross-file remapping happens
+#' here; a `SOURCE_FILE` column is added for traceability. This is what makes
+#' cohort-wide evidence (`compute_cohort_recurrence()`, `cohort.
+#' recurrent_variant_fraction_artifact`) meaningful across the whole cohort in
+#' one `run`, without the caller having to pre-merge files with `bcftools
+#' merge` first (see docs/FILTERING_STRATEGY.md, "Cohort-wide ingestion").
+#' @keywords internal
+read_variant_input_cohort <- function(paths, format = "auto", column_map = NULL, chunk_size = NULL) {
+  missing <- paths[!file.exists(paths)]
+  if (length(missing))
+    stop("Input file(s) not found: ", paste(missing, collapse = ", "), call. = FALSE)
+
+  parts <- lapply(paths, function(p) {
+    one <- read_variant_input(p, format = format, column_map = column_map, chunk_size = chunk_size)
+    one$variants$SOURCE_FILE <- p
+    one
+  })
+  variants <- as.data.frame(data.table::rbindlist(lapply(parts, `[[`, "variants"),
+                                                   fill = TRUE, use.names = TRUE))
+  fmts <- unique(vapply(parts, `[[`, character(1), "format"))
+  fmt <- if (length(fmts) == 1) fmts else "mixed"
+  header_meta <- stats::setNames(lapply(parts, `[[`, "header_metadata"), paths)
+  # per-file detection method is not preserved across the merge (mixed layouts
+  # would make it ambiguous); presence/missingness below is still computed
+  # over the full merged cohort, which is what matters for the report.
+  report <- build_schema_report(variants, parts[[1]]$column_mapping, NULL)
+
+  attr(variants, "input_format") <- fmt
+  attr(variants, "header_metadata") <- header_meta
+  attr(variants, "schema_report") <- report
+  attr(variants, "column_mapping") <- stats::setNames(lapply(parts, `[[`, "column_mapping"), paths)
+  list(variants = variants, format = fmt, header_metadata = header_meta,
+       schema_report = report, column_mapping = attr(variants, "column_mapping"))
 }
 
 #' @keywords internal
@@ -156,12 +207,20 @@ detect_genome_build <- function(meta) {
 }
 
 #' @keywords internal
+#' @param vcf_path one or more VCF paths (a cohort must share one build).
 resolve_genome_build <- function(cfg, vcf_path = NULL) {
   cfg_build <- cfg_get(cfg, c("input", "genome_build"), NULL)
   if (!is.null(cfg_build) && is.na(cfg_build)) cfg_build <- NULL
-  header_build <- NA_character_
-  if (!is.null(vcf_path) && file.exists(vcf_path) && grepl("[.]vcf([.]gz)?$", vcf_path, ignore.case = TRUE))
-    header_build <- detect_genome_build(read_vcf_meta(vcf_path))
+  header_builds <- vapply(vcf_path %||% character(0), function(p) {
+    if (file.exists(p) && grepl("[.]vcf([.]gz)?$", p, ignore.case = TRUE))
+      detect_genome_build(read_vcf_meta(p))
+    else NA_character_
+  }, character(1))
+  header_builds <- unique(stats::na.omit(header_builds))
+  if (length(header_builds) > 1)
+    stop(sprintf("Genome-build conflict across input files: %s. All cohort input files must share the same build.",
+                 paste(header_builds, collapse = ", ")), call. = FALSE)
+  header_build <- if (length(header_builds) == 1) header_builds else NA_character_
   if (!is.null(cfg_build) && !is.na(header_build) && cfg_build != header_build)
     stop(sprintf("Genome-build conflict: config=%s but VCF header=%s. Resolve before continuing.",
                  cfg_build, header_build), call. = FALSE)

@@ -222,8 +222,30 @@ tumoronly run --config config/example.yml
 
 ## 7. Run a cohort
 
-Point `input.vcf` at a multi-sample VEP VCF (or a wide annotated TSV with per-sample
-genotype columns). Cohort recurrence features are computed automatically.
+Cohort recurrence features (`cohort.recurrent_variant_fraction_artifact`) are
+computed automatically from however many distinct samples are in the table
+`run` ingests — so they are only meaningful if that table actually holds the
+whole cohort in one go. Two ways to get there:
+
+- Point `input.vcf`/`input.path` at a multi-sample VEP VCF (or a wide annotated
+  TSV with per-sample genotype columns) — e.g. one produced by `bcftools merge`.
+- Or give `input.path` a YAML list of single-sample files (one per Mutect2
+  tumor-only VCF) — each is ingested on its own and combined into one
+  cohort-wide table, no merge step required:
+  ```yaml
+  input:
+    path:
+      - mutect2/sample1/sample1.vcf.gz
+      - mutect2/sample2/sample2.vcf.gz
+  ```
+  See [docs/FILTERING_STRATEGY.md](docs/FILTERING_STRATEGY.md), "Cohort-wide
+  ingestion", for how sample identity and provenance (`SOURCE_FILE`) are
+  tracked across files.
+
+Running `tumoronly run` once per sample (one file, one run, one `run_id`) is
+also fully supported and is what most of this guide assumes elsewhere — it
+just means `cohort.recurrent_variant_fraction_artifact` has nothing to compare
+against within any single run.
 
 ## 8. Generate the report
 

@@ -39,6 +39,16 @@ add_basic_features <- function(x, cfg) {
   x$strandq <- to_numeric_safe(coalesce_columns(x, c("STRANDQ", "STRQ", "SBQ", "SB")))
   x$popaf_mutect <- to_numeric_safe(coalesce_columns(x, c("POPAF", "popaf", "Mutect_PopAF")))
   x$pon_flag <- as_logical_flag(coalesce_columns(x, c("PON", "panel_of_normals", "pon")))
+  # Mutect2's own germline-resource-based inference (FilterMutectCalls FILTER
+  # tag containing "germline"). NOT the same signal as population_germline_score
+  # (which uses gnomAD/ABraOM AF directly) - this is the caller's own GERMQ-based
+  # call, which can be wrong under LOH (see docs/FILTERING_STRATEGY.md). Combined
+  # with, never a substitute for, population evidence in germline_score().
+  germline_values <- cfg_get(cfg, c("hard_filters", "caller_filter_germline_values"),
+                              c("germline"))
+  x$caller_germline_flag <- vapply(strsplit(x$mutect_filter, ";", fixed = TRUE), function(tags) {
+    any(tags %in% germline_values)
+  }, logical(1))
 
   x$abraom_af <- max_numeric_columns(x, c("ABraOM_AF", "AbraOM_AF", "ABraOM_MAF", "abraom_af"))
   x$sabe_af <- max_numeric_columns(x, c("SABE_AF", "Sabe_AF", "sabe_af"))
@@ -121,9 +131,7 @@ technical_floor_pass <- function(x, cfg) {
   tf <- cfg$technical_filters
   min_alt <- ifelse(x$is_indel, tf$min_alt_count_indel, tf$min_alt_count_snv)
   min_af <- ifelse(x$is_indel, tf$min_af_indel, tf$min_af_snv)
-  pass_filter <- is.na(x$filter_status) |
-    x$filter_status %in% c("PASS", ".", "NA") |
-    x$filter_status == ""
+  pass_filter <- caller_filter_pass(x$filter_status, cfg)
   pass_filter &
     (is.na(x$dp) | x$dp >= tf$min_depth) &
     (is.na(x$alt_count) | x$alt_count >= min_alt) &

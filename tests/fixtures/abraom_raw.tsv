@@ -1,0 +1,6 @@
+Chr	Start	Ref	Alt	PredictedFunc.refGene	Gene.refGene	PredConsequence.refGene	avsnp150	FILTER	CEGH_Filter	HomozygousALT_count	Hemizygous_count	Allele_number	Allele_ALT_count	Frequencies	Cohort
+1	10380	C	T	intergenic	DDX11L1;NONE	dist=NONE;dist=1520	rs1234567	PASS	FDP	6	0	624	12	0.019231	SABE-WGS-1171
+1	10379	CCTAA	-	intergenic	DDX11L1;NONE	dist=NONE;dist=1491		VQSRTrancheINDEL99.00to99.30	FDP	1	0	1190	2	0.001681	SABE-WGS-1171
+1	10433	-	C	intergenic	DDX11L1;NONE	dist=NONE;dist=1441	rs56289060	VQSRTrancheINDEL99.30to99.50	FAB	1	0	926	3	0.003240	SABE-WGS-1171
+1	40000	AC	GG	intergenic	FAM138A;OR4F5	dist=1;dist=1		PASS	FDP	0	0	1000	5	0.005	SABE-WGS-1171
+1	10380	G	T	intergenic	DDX11L1;NONE	dist=NONE;dist=1520	rsBADROW	PASS	FDP	6	0	624	12	0.019231	SABE-WGS-1171

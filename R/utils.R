@@ -25,11 +25,15 @@ log_step <- function(step, msg, ...) {
 
 # ---- checksums / hashing -----------------------------------------------------
 
-#' SHA-256 of a file (streamed).
+#' SHA-256 of a file (streamed). Vectorized over `path` (one hash per file, in
+#' the same order) so a cohort of input files hashes as cleanly as a single one.
 #' @keywords internal
 file_sha256 <- function(path) {
-  if (is.null(path) || is.na(path) || !file.exists(path)) return(NA_character_)
-  digest::digest(file = path, algo = "sha256")
+  if (is.null(path)) return(NA_character_)
+  vapply(path, function(p) {
+    if (is.na(p) || !nzchar(p) || !file.exists(p)) NA_character_
+    else digest::digest(file = p, algo = "sha256")
+  }, character(1), USE.NAMES = FALSE)
 }
 
 # ---- chromosome and allele normalization ------------------------------------
@@ -44,9 +48,64 @@ normalize_chrom <- function(chrom) {
   x
 }
 
+#' Whether a caller FILTER value passes the technical gate. Defaults to
+#' literal "PASS" (+ missing/"."/""), matching every caller unless configured
+#' otherwise. A Mutect2 tumor-only analysis that has already restricted its
+#' input to PASS/germline/panel_of_normals/combinations upstream can set
+#' `hard_filters.caller_filter_accepted_values` so those values are not all
+#' collapsed into a single "not PASS" technical failure (see
+#' docs/FILTERING_STRATEGY.md, "Caller FILTER as graded evidence"). Vectorized;
+#' shared by every call site that checks the caller FILTER so the allowlist is
+#' consistent everywhere it is consulted.
+#' @keywords internal
+#' Whether a variant's (or locus') cohort-wide recurrence is trustworthy
+#' evidence of a systematic artifact, rather than small-cohort noise. Requires
+#' ALL of: the cohort itself large enough to make a fraction meaningful
+#' (`cohort.min_cohort_size_for_recurrence`; below it, returns NA - "not
+#' assessable at this cohort size", never silently FALSE or TRUE), an
+#' absolute floor on how many samples actually carry it
+#' (`cohort.min_recurrent_samples`/`min_recurrent_locus_samples` - a fraction
+#' alone is meaningless at N=2, where one shared variant is already 50%), and
+#' the existing fraction-of-cohort threshold
+#' (`cohort.recurrent_variant_fraction_artifact`/`recurrent_locus_fraction_artifact`).
+#' Vectorized; missing `total_samples`/`variant_n_samples`/`locus_n_samples`
+#' columns (e.g. classification called outside the full pipeline, before
+#' `merge_recurrence_features()`) are treated as "not evaluable", not as zero
+#' recurrence. See docs/FILTERING_STRATEGY.md, "Cohort-size-adaptive recurrence".
+#' @keywords internal
+cohort_recurrent_flag <- function(x, cfg, level = c("variant", "locus")) {
+  level <- match.arg(level)
+  col <- function(name) if (name %in% names(x)) x[[name]] else rep(NA_real_, nrow(x))
+  n <- col(if (level == "variant") "variant_n_samples" else "locus_n_samples")
+  freq <- col(if (level == "variant") "variant_cohort_freq" else "locus_cohort_freq")
+  total <- col("total_samples")
+
+  min_n <- cfg_get(cfg, c("cohort",
+    if (level == "variant") "min_recurrent_samples" else "min_recurrent_locus_samples"), 3)
+  frac_thresh <- cfg_get(cfg, c("cohort",
+    if (level == "variant") "recurrent_variant_fraction_artifact" else "recurrent_locus_fraction_artifact"),
+    if (level == "variant") 0.30 else 0.40)
+  min_cohort <- cfg_get(cfg, c("cohort", "min_cohort_size_for_recurrence"), 10)
+
+  evaluable <- !is.na(total) & total >= min_cohort
+  flag <- evaluable & !is.na(n) & n >= min_n & !is.na(freq) & freq >= frac_thresh
+  ifelse(evaluable, flag, NA)
+}
+
+caller_filter_pass <- function(filter_status, cfg = NULL) {
+  accepted <- cfg_get(cfg, c("hard_filters", "caller_filter_accepted_values"), "PASS")
+  is.na(filter_status) | filter_status %in% c(accepted, ".", "NA") | filter_status == ""
+}
+
 #' Trim shared leading/trailing bases from a REF/ALT pair and left-normalize the
 #' position, matching bcftools/VEP-style minimal representation. Purely local
-#' (no reference sequence); handles SNVs, insertions and deletions. Vectorized.
+#' (no reference sequence); handles SNVs, insertions and deletions. Vectorized
+#' across ALL rows per trim step (not a per-row loop): each step trims one
+#' character from every row that still needs it, so cost is
+#' O(longest_allele_in_the_whole_input) vectorized passes, not O(n) R-level
+#' loop iterations - the difference between seconds and hours at COSMIC-v104
+#' scale (~10^8 rows). Semantically identical to trimming one row fully before
+#' moving to the next (suffix trim always completes before prefix trim starts).
 #'
 #' @return a data.frame with normalized `pos`, `ref`, `alt`.
 #' @keywords internal
@@ -54,25 +113,34 @@ normalize_alleles <- function(pos, ref, alt) {
   pos <- as.integer(pos)
   ref <- toupper(as.character(ref))
   alt <- toupper(as.character(alt))
-  n <- length(ref)
   out_pos <- pos; out_ref <- ref; out_alt <- alt
-  for (i in seq_len(n)) {
-    r <- out_ref[i]; a <- out_alt[i]; p <- out_pos[i]
-    if (is.na(r) || is.na(a) || r == "" || a == "") next
-    # trim shared suffix (keep at least 1 base on each side)
-    while (nchar(r) > 1 && nchar(a) > 1 &&
-           substr(r, nchar(r), nchar(r)) == substr(a, nchar(a), nchar(a))) {
-      r <- substr(r, 1, nchar(r) - 1)
-      a <- substr(a, 1, nchar(a) - 1)
-    }
-    # trim shared prefix, advancing position
-    while (nchar(r) > 1 && nchar(a) > 1 &&
-           substr(r, 1, 1) == substr(a, 1, 1)) {
-      r <- substr(r, 2, nchar(r))
-      a <- substr(a, 2, nchar(a))
-      p <- p + 1L
-    }
-    out_ref[i] <- r; out_alt[i] <- a; out_pos[i] <- p
+  valid <- !is.na(out_ref) & !is.na(out_alt) & out_ref != "" & out_alt != ""
+
+  max_len <- suppressWarnings(max(nchar(ref), nchar(alt), na.rm = TRUE))
+  if (!is.finite(max_len)) max_len <- 0L
+
+  # trim shared suffix (keep at least 1 base on each side)
+  for (i in seq_len(max_len)) {
+    nr <- nchar(out_ref); nalt <- nchar(out_alt)
+    idx <- which(valid & nr > 1L & nalt > 1L)
+    if (length(idx) == 0L) break
+    same <- substr(out_ref[idx], nr[idx], nr[idx]) == substr(out_alt[idx], nalt[idx], nalt[idx])
+    if (!any(same)) break
+    idx <- idx[same]
+    out_ref[idx] <- substr(out_ref[idx], 1L, nchar(out_ref[idx]) - 1L)
+    out_alt[idx] <- substr(out_alt[idx], 1L, nchar(out_alt[idx]) - 1L)
+  }
+  # trim shared prefix, advancing position
+  for (i in seq_len(max_len)) {
+    nr <- nchar(out_ref); nalt <- nchar(out_alt)
+    idx <- which(valid & nr > 1L & nalt > 1L)
+    if (length(idx) == 0L) break
+    same <- substr(out_ref[idx], 1L, 1L) == substr(out_alt[idx], 1L, 1L)
+    if (!any(same)) break
+    idx <- idx[same]
+    out_ref[idx] <- substr(out_ref[idx], 2L, nchar(out_ref[idx]))
+    out_alt[idx] <- substr(out_alt[idx], 2L, nchar(out_alt[idx]))
+    out_pos[idx] <- out_pos[idx] + 1L
   }
   data.frame(pos = out_pos, ref = out_ref, alt = out_alt, stringsAsFactors = FALSE)
 }

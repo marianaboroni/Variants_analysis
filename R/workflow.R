@@ -31,7 +31,10 @@ run_tumor_only <- function(config, run_id = NULL) {
   build <- cfg$input$genome_build
   write_resolved_config(cfg, file.path(run_dir, "config.resolved.yml"))
 
-  log_step("run", "reading variants (multi-format ingestion)", file = cfg$input$vcf, run_id = rid)
+  log_step("run", "reading variants (multi-format ingestion)",
+           file = if (length(cfg$input$vcf) > 1)
+             sprintf("cohort of %d files", length(cfg$input$vcf)) else cfg$input$vcf,
+           run_id = rid)
   ing <- read_variant_input(
     cfg$input$vcf,
     format = cfg_get(cfg, c("input", "format"), "auto"),

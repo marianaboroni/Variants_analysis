@@ -1,15 +1,15 @@
 input_tumor_type	input_tumor_subtype	cosmic_primary_site	cosmic_histology	match_level	mapping_version	mapping_source
-MELANOMA		skin	malignant_melanoma	exact	2026.1	curated
-MELANOMA		skin		compatible	2026.1	curated
-LUAD		lung	adenocarcinoma	exact	2026.1	curated
-LUAD		lung		compatible	2026.1	curated
-LUSC		lung	squamous_cell_carcinoma	exact	2026.1	curated
-COREAD		large_intestine	adenocarcinoma	exact	2026.1	curated
-COREAD		large_intestine		compatible	2026.1	curated
-UCEC		endometrium	endometrioid_carcinoma	exact	2026.1	curated
-UCEC		endometrium		compatible	2026.1	curated
-UCEC	serous	endometrium	serous_carcinoma	exact	2026.1	curated
-BRCA		breast	ductal_carcinoma	exact	2026.1	curated
-BRCA		breast		compatible	2026.1	curated
-HGSOC		ovary	serous_carcinoma	exact	2026.1	curated
-HGSOC		ovary		compatible	2026.1	curated
+MELANOMA		skin	malignant_melanoma	exact	2026.2	curated
+MELANOMA		skin		compatible	2026.2	curated
+LUAD		lung	carcinoma	exact	2026.2	curated
+LUAD		lung		compatible	2026.2	curated
+LUSC		lung	carcinoma	exact	2026.2	curated
+COREAD		large_intestine	carcinoma	exact	2026.2	curated
+COREAD		large_intestine		compatible	2026.2	curated
+UCEC		endometrium	carcinoma	exact	2026.2	curated
+UCEC		endometrium		compatible	2026.2	curated
+UCEC	serous	endometrium	carcinoma	exact	2026.2	curated
+BRCA		breast	carcinoma	exact	2026.2	curated
+BRCA		breast		compatible	2026.2	curated
+HGSOC		ovary	carcinoma	exact	2026.2	curated
+HGSOC		ovary		compatible	2026.2	curated

@@ -3,6 +3,19 @@
 
 VALID_BUILDS <- c("GRCh37", "GRCh38")
 
+#' Normalize `input.path`/`input.vcf`/`input.variants` into a plain character
+#' vector. YAML parses a sequence (`- a.vcf.gz\n- b.vcf.gz`) as a list, not an
+#' atomic vector; every downstream consumer (file.exists(), read_variant_input(),
+#' resolve_genome_build(), file_sha256()) expects `character`, so this is the
+#' single place that unwraps it. A scalar path round-trips unchanged.
+#' @keywords internal
+as_input_paths <- function(x) {
+  if (is.null(x)) return(NULL)
+  x <- as.character(unlist(x, use.names = FALSE))
+  if (length(x) == 0) return(NULL)
+  x
+}
+
 #' Validate a tumoronly configuration.
 #'
 #' Checks required fields and reports, for each problem: the missing/invalid
@@ -22,13 +35,16 @@ validate_config <- function(cfg, require_input = TRUE) {
   }
 
   # --- input --------------------------------------------------------------
-  vcf <- cfg_get(cfg, c("input", "path"),
-                 cfg_get(cfg, c("input", "vcf"), cfg_get(cfg, c("input", "variants"), NULL)))
-  if (is.null(vcf) || is.na(vcf)) {
-    add_err("input.path", "missing", "path to a VCF/MAF/TSV variant file",
-            "input:\n    path: data/sample.vep.vcf.gz")
-  } else if (require_input && !file.exists(vcf)) {
-    add_err("input.path", vcf, "an existing file path", "input:\n    path: data/sample.vep.vcf.gz")
+  vcf <- as_input_paths(cfg_get(cfg, c("input", "path"),
+                 cfg_get(cfg, c("input", "vcf"), cfg_get(cfg, c("input", "variants"), NULL))))
+  if (is.null(vcf) || any(is.na(vcf))) {
+    add_err("input.path", "missing", "a path, or a YAML list of paths, to VCF/MAF/TSV variant file(s)",
+            "input:\n    path: data/sample.vep.vcf.gz\n  # or a cohort:\n  #   path:\n  #     - data/sample1.vep.vcf.gz\n  #     - data/sample2.vep.vcf.gz")
+  } else if (require_input) {
+    missing <- vcf[!file.exists(vcf)]
+    if (length(missing))
+      add_err("input.path", paste(missing, collapse = ", "), "existing file path(s)",
+              "input:\n    path: data/sample.vep.vcf.gz")
   }
 
   build <- cfg_get(cfg, c("input", "genome_build"), NULL)
@@ -69,11 +85,14 @@ validate_config <- function(cfg, require_input = TRUE) {
 
 #' Resolve configuration defaults into a fully-specified list.
 #' Unifies the legacy `output.dir` / new `analysis.output_dir` and
-#' `input.variants` / `input.vcf` spellings.
+#' `input.variants` / `input.vcf` spellings. `cfg$input$vcf` is always a plain
+#' character vector after this call: length 1 for a single file (unchanged
+#' behavior), length N for a cohort given as a YAML list — see
+#' docs/FILTERING_STRATEGY.md, "Cohort-wide ingestion".
 #' @keywords internal
 resolve_config <- function(cfg) {
-  cfg$input$vcf <- cfg_get(cfg, c("input", "path"),
-                           cfg_get(cfg, c("input", "vcf"), cfg_get(cfg, c("input", "variants"), NULL)))
+  cfg$input$vcf <- as_input_paths(cfg_get(cfg, c("input", "path"),
+                           cfg_get(cfg, c("input", "vcf"), cfg_get(cfg, c("input", "variants"), NULL))))
   cfg$input$format <- cfg_get(cfg, c("input", "format"), "auto")
   if (is.null(cfg$analysis)) cfg$analysis <- list()
   cfg$analysis$output_dir <- cfg_get(cfg, c("analysis", "output_dir"),
@@ -92,11 +111,13 @@ write_resolved_config <- function(cfg, path) {
 }
 
 #' Deterministic run id from config + input checksum when none is supplied.
+#' Stable regardless of file order for a cohort (multiple `input.path` entries).
 #' @keywords internal
 resolve_run_id <- function(cfg) {
   rid <- cfg_get(cfg, c("analysis", "run_id"), NULL)
   if (!is.null(rid) && !is.na(rid) && nzchar(rid)) return(as.character(rid))
-  vcf <- cfg$input$vcf
-  seed <- paste(basename(vcf %||% "na"), file_sha256(vcf), sep = "|")
+  vcf <- sort(cfg$input$vcf %||% "na")
+  seed <- paste(paste(basename(vcf), collapse = "+"),
+                paste(file_sha256(vcf), collapse = "+"), sep = "|")
   paste0("run_", substr(digest::digest(seed, algo = "sha256"), 1, 12))
 }

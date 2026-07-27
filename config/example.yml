@@ -8,6 +8,15 @@ analysis:
 
 input:
   path: data/demo/variants.tsv # VCF/MAF/TSV (.vcf[.gz]/.maf[.gz]/.tsv[.gz]/.txt[.gz])
+  # Cohort of several single-sample files (e.g. one Mutect2 tumor-only VCF per
+  # sample): give a YAML list instead of a scalar. Each file is ingested on its
+  # own (own format/sample detection), then combined into one cohort-wide table
+  # for this run — no `bcftools merge` needed. This is what makes
+  # cohort.recurrent_variant_fraction_artifact meaningful; see
+  # docs/FILTERING_STRATEGY.md, "Cohort-wide ingestion".
+  #   path:
+  #     - mutect2/sample1/sample1.mutect2.filtered_VEP.ann.vcf.gz
+  #     - mutect2/sample2/sample2.mutect2.filtered_VEP.ann.vcf.gz
   format: auto                 # auto | vcf | maf | tsv (detected by content, not extension alone)
   genome_build: GRCh38         # prevails over the VCF header; conflict => error
   sample_metadata: data/demo/sample_metadata.tsv
@@ -26,12 +35,22 @@ reference:
 cosmic:
   # Point to an already-prepared processed DB, OR give raw_file to build one.
   processed_db: null           # e.g. db/cosmic/v99/GRCh38_to_GRCh38
-  raw_file: null               # e.g. data/COSMIC_updated.tsv.gz
+  raw_file: null               # e.g. data/COSMIC_updated.tsv.gz — OR run `tumoronly build-cosmic-input`
+                                # first (see below) and point this at its output.
   release: v99
   source_build: GRCh38
   target_build: GRCh38
   cache_dir: db/cosmic
   rebuild: false
+  # Only read by `tumoronly build-cosmic-input` (a one-time, separate step that
+  # produces `raw_file` above from the raw COSMIC release files — see
+  # docs/AUXILIARY_DATABASES.md). Not read by `prepare-cosmic`/`run`.
+  input_sources:
+    genome_screens_tsv: null        # Cosmic_GenomeScreensMutant_v104_GRCh38.tsv
+    noncoding_tsv: null             # Cosmic_NonCodingVariants_v104_GRCh38.tsv
+    genome_screens_normal_vcf: null # Cosmic_GenomeScreensMutant_Normal_v104_GRCh38.vcf
+    noncoding_normal_vcf: null      # Cosmic_NonCodingVariants_Normal_v104_GRCh38.vcf
+    classification_tsv: null        # Cosmic_Classification_v104_GRCh38.tsv.gz
   # tumor-type-stratified COSMIC evidence (see docs/COSMIC_DECISION_RULES.md)
   tumor_type_mapping: config/cosmic_tumor_type_mapping.tsv
   pan_cancer_min_tumor_types: 5
@@ -45,6 +64,16 @@ cohort:
   cancer_type: "PANCANCER"
   recurrent_variant_fraction_artifact: 0.30
   recurrent_locus_fraction_artifact: 0.40
+  # Below this many distinct samples in the run, recurrence evidence is not
+  # evaluated at all (NA, not FALSE) - a fraction is meaningless at N=2, where
+  # 1/2 samples sharing a variant is already 50%. See
+  # docs/FILTERING_STRATEGY.md, "Cohort-size-adaptive recurrence".
+  min_cohort_size_for_recurrence: 10
+  # Absolute floor on how many samples must actually carry a variant/locus
+  # before its cohort fraction counts as artifact evidence, in addition to
+  # the fraction thresholds above.
+  min_recurrent_samples: 3
+  min_recurrent_locus_samples: 3
 
 cancer:
   default_tumor_type: "PANCANCER"
@@ -55,6 +84,16 @@ hard_filters:
   adaptive_depth_fraction: 0.35
   adaptive_q25_depth_fraction: 0.50
   missing_required_metrics_fail: false
+  # Caller FILTER values that pass the technical gate (default: PASS only).
+  # For a Mutect2 tumor-only cohort where PASS/germline/panel_of_normals/
+  # combinations were all retained upstream (see docs/FILTERING_STRATEGY.md,
+  # "Caller FILTER as graded evidence"), uncomment to let germline/PON-flagged
+  # variants reach population/oncogenic scoring instead of an automatic
+  # technical_fail:
+  # caller_filter_accepted_values: ["PASS", "germline", "panel_of_normals", "germline;panel_of_normals"]
+  # FILTER values treated as the caller's own germline signal (feeds
+  # caller_germline_flag -> germline_score; never a veto on its own):
+  # caller_filter_germline_values: ["germline", "germline;panel_of_normals"]
 
 # --- adaptive per-sample filtering (EXPERIMENTAL; see docs/ADAPTIVE_FILTERING.md)
 adaptive_filtering:
@@ -152,7 +191,10 @@ population:
     common_af: 0.01
     rare_af: 0.001
   brazilian:
-    db: null                      # ABraOM/BIPMed TSV (user-provided; not redistributed)
+    db: null                      # VCF-standard, prepared TSV — output of `tumoronly prepare-abraom`
+    raw_file: null                 # only read by `prepare-abraom`: raw ANNOVAR-format TSV (e.g.
+                                    # SABE1171.Abraom.clean.tsv) — user-provided, not redistributed
+    cache_dir: db/abraom           # only read by `prepare-abraom`
     name: ABraOM_SABE
     genome_build: GRCh38          # ABraOM SABE-WGS is GRCh38; SABE-WES is GRCh37
     common_af: 0.01

@@ -200,23 +200,28 @@ standardize_cosmic_raw <- function(x) {
 #' for tumor-type-stratified matching (see R/cosmic_context.R). Delimiters are
 #' irrelevant here because categories are stored as columns, not concatenated.
 #' @keywords internal
+#' data.table grouped aggregation (not tapply()/split()): tapply's split()
+#' does not scale to COSMIC-v104 volumes (~10^8 rows, potentially 10^7 unique
+#' groups) - a single data.table `by=` group-by handles that via one radix
+#' sort instead of building an R-level split per group. Groups come out in
+#' order of first appearance, matching the original `!duplicated(grp)` order.
+#' @keywords internal
 build_cosmic_long <- function(rows, release) {
-  site <- norm_cosmic_cat(rows$tumor_site)
-  hist <- norm_cosmic_cat(rows$tumor_histology)
-  sub  <- norm_cosmic_cat(rows$tumor_subtype)
-  cnt  <- rows$cosmic_count; cnt[is.na(cnt)] <- 1
-  grp  <- paste(rows$canonical_key, site, hist, sub, sep = "\r")
-  occ  <- tapply(cnt, grp, sum)
-  srcn <- tapply(cnt, grp, length)
-  first <- !duplicated(grp)
+  dt <- data.table::as.data.table(rows)
+  dt[, `.site` := norm_cosmic_cat(tumor_site)]
+  dt[, `.hist` := norm_cosmic_cat(tumor_histology)]
+  dt[, `.sub`  := norm_cosmic_cat(tumor_subtype)]
+  dt[, `.cnt`  := data.table::fifelse(is.na(cosmic_count), 1, cosmic_count)]
+  out <- dt[, list(occurrence_count = sum(.cnt), source_row_count = .N),
+            by = list(canonical_key, .site, .hist, .sub)]
   data.frame(
-    canonical_key = rows$canonical_key[first],
-    cosmic_primary_site = site[first],
-    cosmic_histology = hist[first],
-    cosmic_subtype = sub[first],
-    occurrence_count = as.numeric(occ[grp[first]]),
+    canonical_key = out$canonical_key,
+    cosmic_primary_site = out$.site,
+    cosmic_histology = out$.hist,
+    cosmic_subtype = out$.sub,
+    occurrence_count = as.numeric(out$occurrence_count),
     cosmic_release = release,
-    source_row_count = as.integer(srcn[grp[first]]),
+    source_row_count = as.integer(out$source_row_count),
     stringsAsFactors = FALSE)
 }
 
@@ -234,34 +239,37 @@ norm_cosmic_cat <- function(x) {
 #' "site::histology=count" pairs joined by ";", enabling tumor-type-stratified
 #' evidence downstream (see R/cosmic_context.R). Counts with no tumor category
 #' are aggregated under the empty category.
+#'
+#' data.table grouped aggregation (not tapply()/split(), and not a tapply
+#' nested inside another tapply's per-group closure): at COSMIC-v104 scale
+#' (~10^8 rows, potentially 10^7 unique canonical keys) that combination does
+#' not finish in practical time. The per-key/category breakdown is computed as
+#' its own (smaller) group-by first, then folded into one string per key -
+#' categories are sorted alphabetically within each key's string to match
+#' tapply()'s original (factor-level) ordering exactly.
 #' @keywords internal
 collapse_cosmic_by_key <- function(rows) {
-  key <- rows$canonical_key
-  rows$cat <- paste(norm_cosmic_cat(rows$tumor_site), norm_cosmic_cat(rows$tumor_histology), sep = "::")
-  agg_ids  <- tapply(rows$cosmic_id, key, function(z) paste(unique(stats::na.omit(z)), collapse = ";"))
-  agg_cnt  <- tapply(rows$cosmic_count, key, function(z) if (all(is.na(z))) NA_real_ else sum(z, na.rm = TRUE))
-  agg_site <- tapply(rows$tumor_site, key, function(z) paste(unique(stats::na.omit(z[z != ""])), collapse = ";"))
-  # per-category breakdown: sum counts within each (site::histology) per key
+  dt <- data.table::as.data.table(rows)
   safe <- function(s) gsub("[;=]", "_", s)   # keep the export string parseable
-  agg_bd <- tapply(seq_len(nrow(rows)), key, function(idx) {
-    cats <- safe(rows$cat[idx]); cnt <- rows$cosmic_count[idx]
-    cnt[is.na(cnt)] <- 1  # a record with no count still counts as one occurrence
-    by_cat <- tapply(cnt, cats, sum)
-    paste(sprintf("%s=%s", names(by_cat), format(as.numeric(by_cat), trim = TRUE, scientific = FALSE)),
-          collapse = ";")
-  })
-  first <- rows[!duplicated(key), , drop = FALSE]
-  k <- first$canonical_key
-  data.frame(
-    canonical_key = k,
-    chrom = first$chrom, pos = first$pos, ref = first$ref, alt = first$alt,
-    gene = first$gene,
-    COSMIC_MUTATION_IDS = as.character(agg_ids[k]),
-    COSMIC_OCCURRENCE_COUNT = as.numeric(agg_cnt[k]),
-    COSMIC_TUMOR_TYPES = as.character(agg_site[k]),
-    COSMIC_TUMOR_BREAKDOWN = as.character(agg_bd[k]),
-    stringsAsFactors = FALSE
-  )
+  dt[, `.cat` := safe(paste(norm_cosmic_cat(tumor_site), norm_cosmic_cat(tumor_histology), sep = "::"))]
+  dt[, `.cnt1` := data.table::fifelse(is.na(cosmic_count), 1, cosmic_count)]
+
+  by_cat <- dt[, list(n = sum(.cnt1)), by = list(canonical_key, .cat)]
+  data.table::setorder(by_cat, canonical_key, .cat)
+  breakdown <- by_cat[, list(COSMIC_TUMOR_BREAKDOWN = paste(
+    sprintf("%s=%s", .cat, format(n, trim = TRUE, scientific = FALSE)), collapse = ";")),
+    by = canonical_key]
+
+  agg <- dt[, list(
+    chrom = chrom[1L], pos = pos[1L], ref = ref[1L], alt = alt[1L], gene = gene[1L],
+    COSMIC_MUTATION_IDS = paste(unique(stats::na.omit(cosmic_id)), collapse = ";"),
+    COSMIC_OCCURRENCE_COUNT = if (all(is.na(cosmic_count))) NA_real_ else sum(cosmic_count, na.rm = TRUE),
+    COSMIC_TUMOR_TYPES = paste(unique(stats::na.omit(tumor_site[tumor_site != ""])), collapse = ";")
+  ), by = canonical_key]
+
+  out <- merge(agg, breakdown, by = "canonical_key", sort = FALSE, all.x = TRUE)
+  as.data.frame(out[, list(canonical_key, chrom, pos, ref, alt, gene,
+    COSMIC_MUTATION_IDS, COSMIC_OCCURRENCE_COUNT, COSMIC_TUMOR_TYPES, COSMIC_TUMOR_BREAKDOWN)])
 }
 
 #' @keywords internal
@@ -336,6 +344,10 @@ liftover_rtracklayer <- function(std, chain_file) {
 #' FASTA). Returns a logical vector of matches, or NULL if validation could not
 #' be performed (recorded in the manifest as ref_validated = FALSE). Never drops
 #' silently: the caller writes mismatches to the ref_mismatch provenance table.
+#' Batches one `Biostrings::Views()` call per chromosome (~25 calls total) over
+#' ALL of that chromosome's rows at once, rather than one `subseq()` call per
+#' row - same pattern as `reconstruct_vcf_representation()` in
+#' R/population_brazilian_prepare.R, needed at COSMIC-v104 scale (~10^8 rows).
 #' @keywords internal
 validate_ref_against_fasta <- function(df, fasta, target_build) {
   if (is.null(fasta) || is.na(fasta) || !file.exists(fasta)) {
@@ -351,11 +363,13 @@ validate_ref_against_fasta <- function(df, fasta, target_build) {
   fa <- Biostrings::readDNAStringSet(fasta)
   names(fa) <- normalize_chrom(sub("\\s.*$", "", names(fa)))
   ok <- rep(FALSE, nrow(df))
-  for (i in seq_len(nrow(df))) {
-    chr <- df$chrom[i]
+  ref_len <- nchar(df$ref)
+  for (chr in unique(df$chrom)) {
     if (!chr %in% names(fa)) next
-    seqi <- as.character(Biostrings::subseq(fa[[chr]], start = df$pos[i], width = nchar(df$ref[i])))
-    ok[i] <- toupper(seqi) == toupper(df$ref[i])
+    sel <- which(df$chrom == chr)
+    seqs <- toupper(as.character(
+      Biostrings::Views(fa[[chr]], start = df$pos[sel], width = ref_len[sel])))
+    ok[sel] <- seqs == toupper(df$ref[sel])
   }
   ok
 }

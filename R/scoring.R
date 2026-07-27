@@ -5,10 +5,17 @@ score_variants <- function(x, cfg) {
   x$cohort_artifact_score <- cohort_artifact_score(x, cfg)
   x$quality_artifact_score <- quality_artifact_score(x, cfg)
 
+  # caller_germline_flag (Mutect2's own GERMQ-based FILTER call) is ONE weighted
+  # component among several, never a veto - it can be wrong under LOH at driver
+  # loci (see docs/FILTERING_STRATEGY.md). population_germline_score (ABraOM/
+  # gnomAD AF) keeps the largest weight since it is sample-independent ground
+  # truth; a variant absent from population databases can still reach
+  # high_confidence_somatic even when Mutect2 flagged it "germline".
   x$germline_score <- bounded01(
-    0.55 * x$population_germline_score +
-      0.30 * x$vaf_germline_score +
-      0.15 * recurrent_germline_signal(x, cfg)
+    0.45 * x$population_germline_score +
+      0.25 * x$vaf_germline_score +
+      0.15 * recurrent_germline_signal(x, cfg) +
+      0.15 * ifelse(x$caller_germline_flag, 1, 0)
   )
   x$artifact_score <- bounded01(
     0.45 * x$cohort_artifact_score +
@@ -64,18 +71,27 @@ vaf_germline_score <- function(x) {
 }
 
 recurrent_germline_signal <- function(x, cfg) {
-  freq <- x$variant_cohort_freq
-  out <- rep(0, length(freq))
-  out[!is.na(freq) & freq >= cfg$cohort$recurrent_variant_fraction_artifact] <- 0.8
-  out[!is.na(freq) & freq >= 0.15] <- 1
-  out
+  flag <- cohort_recurrent_flag(x, cfg, "variant")  # NA below cohort.min_cohort_size_for_recurrence
+  ifelse(!is.na(flag) & flag, 1, 0)
 }
 
 cohort_artifact_score <- function(x, cfg) {
   vf <- x$variant_cohort_freq
   lf <- x$locus_cohort_freq
-  a <- saturating_score(vf, cfg$cohort$recurrent_variant_fraction_artifact, 0.20)
-  b <- saturating_score(lf, cfg$cohort$recurrent_locus_fraction_artifact, 0.30)
+  var_thresh <- cfg_get(cfg, c("cohort", "recurrent_variant_fraction_artifact"), 0.30)
+  locus_thresh <- cfg_get(cfg, c("cohort", "recurrent_locus_fraction_artifact"), 0.40)
+  # ramp UP from the threshold (matches technical_evidence_score's use of
+  # saturating_score(), e.g. saturating_score(dp, min_depth, min_depth * 4));
+  # previously called as saturating_score(vf, threshold, 0.20) with
+  # threshold(0.30) > 0.20, which inverted the ramp (a *rare* variant scored
+  # 1, a *recurrent* one scored 0) - fixed here.
+  a <- saturating_score(vf, var_thresh, var_thresh + 0.20)
+  b <- saturating_score(lf, locus_thresh, locus_thresh + 0.30)
+  # gate on the same evaluability/floor as everywhere else recurrence is
+  # consulted (see cohort_recurrent_flag()): a small cohort or a variant/locus
+  # under the absolute sample-count floor contributes no artifact evidence.
+  a[!isTRUE_vec(cohort_recurrent_flag(x, cfg, "variant"))] <- 0
+  b[!isTRUE_vec(cohort_recurrent_flag(x, cfg, "locus"))] <- 0
   low_median_vaf <- ifelse(!is.na(x$variant_median_vaf) & x$variant_median_vaf < 0.08, 0.2, 0)
   bounded01(pmax(a, b) + low_median_vaf)
 }
@@ -92,7 +108,7 @@ quality_artifact_score <- function(x, cfg) {
   bad_tlod <- inverse_score(x$tlod, tf$min_tlod, 2)
   bad_mbq <- inverse_score(x$mbq, tf$min_mbq, 15)
   bad_mmq <- inverse_score(x$mmq, tf$min_mmq, 20)
-  failed_filter <- !(is.na(x$filter_status) | x$filter_status %in% c("PASS", ".", "NA") | x$filter_status == "")
+  failed_filter <- !caller_filter_pass(x$filter_status, cfg)
 
   bounded01(rowMeans(cbind(bad_depth, bad_alt, bad_tlod, bad_mbq, bad_mmq), na.rm = TRUE) +
               ifelse(failed_filter, 0.4, 0))
@@ -247,7 +263,7 @@ classify_technical_artifact_evidence <- function(x, cfg) {
   low_mmq <- !is.na(x$mmq) & x$mmq < tf$min_mmq
   low_depth <- !is.na(x$dp) & x$dp < x$hard_min_depth
   low_alt <- !is.na(x$alt_count) & x$alt_count < ifelse(x$is_indel, x$hard_min_alt_count_indel, x$hard_min_alt_count_snv)
-  filter_fail <- !is.na(x$mutect_filter) & !(x$mutect_filter %in% c("PASS", ".", "NA", ""))
+  filter_fail <- !caller_filter_pass(x$mutect_filter, cfg)
   strong_bias <- !is.na(x$orientation_bias) & x$orientation_bias > 0.8
   strand_bias <- !is.na(x$strand_artifact) & x$strand_artifact > 0.8
   clustered <- x$clustered_events
@@ -255,7 +271,8 @@ classify_technical_artifact_evidence <- function(x, cfg) {
   pon <- x$pon_flag
 
   strong_artifact <- filter_fail | pon | strong_bias | strand_bias | clustered | weak | low_tlod | low_mbq | low_mmq
-  possible_artifact <- (!strong_artifact & (low_depth | low_alt | x$artifact_score >= 0.6 | x$variant_cohort_freq >= cfg$cohort$recurrent_variant_fraction_artifact))
+  cohort_recurrent <- isTRUE_vec(cohort_recurrent_flag(x, cfg, "variant"))
+  possible_artifact <- (!strong_artifact & (low_depth | low_alt | x$artifact_score >= 0.6 | cohort_recurrent))
   high_confidence <- !strong_artifact & !possible_artifact & !filter_fail &
     (is.na(x$dp) | x$dp >= x$hard_min_depth) &
     (is.na(x$alt_count) | x$alt_count >= ifelse(x$is_indel, x$hard_min_alt_count_indel, x$hard_min_alt_count_snv)) &
@@ -271,8 +288,8 @@ classify_technical_artifact_evidence <- function(x, cfg) {
 }
 
 classify_internal_recurrence <- function(x, cfg) {
-  variant_artifact <- !is.na(x$variant_cohort_freq) & x$variant_cohort_freq >= cfg$cohort$recurrent_variant_fraction_artifact
-  locus_artifact <- !is.na(x$locus_cohort_freq) & x$locus_cohort_freq >= cfg$cohort$recurrent_locus_fraction_artifact
+  variant_artifact <- isTRUE_vec(cohort_recurrent_flag(x, cfg, "variant"))
+  locus_artifact <- isTRUE_vec(cohort_recurrent_flag(x, cfg, "locus"))
   tumor_supported <- !is.na(x$variant_tumor_type_freq) & x$variant_tumor_type_freq >= 0.05 & x$variant_tumor_type_freq >= x$variant_cohort_freq
   gene_only <- !is.na(x$variant_cohort_freq) & x$variant_cohort_freq >= 0.02
 

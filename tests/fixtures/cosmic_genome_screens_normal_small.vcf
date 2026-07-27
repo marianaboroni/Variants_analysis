@@ -1,0 +1,9 @@
+##fileformat=VCFv4.1
+##FILTER=<ID=PASS,Description="All filters passed">
+##source=COSMICv104
+##reference=GRCh38
+##INFO=<ID=GENE,Number=1,Type=String,Description="Gene name">
+##INFO=<ID=TRANSCRIPT,Number=1,Type=String,Description="Transcript accession">
+##INFO=<ID=OLD_VARIANT,Number=.,Type=String,Description="Original chr:pos:ref:alt encoding">
+#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO
+1	10108	COSV70831266	C	T	.	.	GENE=DDX11L1;TRANSCRIPT=ENST00000450305.2;GENOME_SCREEN_SAMPLE_COUNT=1;IS_CANONICAL=n;SO_TERM=SNV
