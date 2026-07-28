@@ -12,6 +12,7 @@
 #' @examples
 #' \dontrun{ render_tumor_only_report("results/example_run") }
 render_tumor_only_report <- function(run_dir) {
+  run_dir <- normalizePath(run_dir, mustWork = TRUE)
   out_html <- file.path(run_dir, "report", "tumor_only_report.html")
   dir.create(dirname(out_html), recursive = TRUE, showWarnings = FALSE)
   rmd <- report_template_path()
@@ -22,7 +23,7 @@ render_tumor_only_report <- function(run_dir) {
     ok <- tryCatch({
       rmarkdown::render(rmd, output_file = basename(out_html),
                         output_dir = dirname(out_html),
-                        params = list(run_dir = normalizePath(run_dir)),
+                        params = list(run_dir = run_dir),
                         quiet = TRUE, envir = new.env())
       TRUE
     }, error = function(e) { log_step("report", "rmarkdown render failed; using fallback",
@@ -34,11 +35,16 @@ render_tumor_only_report <- function(run_dir) {
 
 #' @keywords internal
 report_template_path <- function() {
+  dev_roots <- c()
+  r_dir <- Sys.getenv("TUMORONLY_R_DIR", unset = "")
+  if (nzchar(r_dir)) dev_roots <- c(dev_roots, dirname(r_dir))
+  dev_roots <- unique(c(dev_roots, getwd()))
+  for (root in dev_roots) {
+    dev <- file.path(root, "inst", "report", "tumor_only_report.Rmd")
+    if (file.exists(dev)) return(dev)
+  }
   p <- system.file("report", "tumor_only_report.Rmd", package = "tumoronly")
   if (nzchar(p) && file.exists(p)) return(p)
-  # dev fallback
-  dev <- file.path(getwd(), "inst", "report", "tumor_only_report.Rmd")
-  if (file.exists(dev)) return(dev)
   NULL
 }
 

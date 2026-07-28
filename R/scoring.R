@@ -90,9 +90,12 @@ cohort_artifact_score <- function(x, cfg) {
   # gate on the same evaluability/floor as everywhere else recurrence is
   # consulted (see cohort_recurrent_flag()): a small cohort or a variant/locus
   # under the absolute sample-count floor contributes no artifact evidence.
-  a[!isTRUE_vec(cohort_recurrent_flag(x, cfg, "variant"))] <- 0
-  b[!isTRUE_vec(cohort_recurrent_flag(x, cfg, "locus"))] <- 0
-  low_median_vaf <- ifelse(!is.na(x$variant_median_vaf) & x$variant_median_vaf < 0.08, 0.2, 0)
+  variant_recurrent <- isTRUE_vec(cohort_recurrent_flag(x, cfg, "variant"))
+  locus_recurrent <- isTRUE_vec(cohort_recurrent_flag(x, cfg, "locus"))
+  a[!variant_recurrent] <- 0
+  b[!locus_recurrent] <- 0
+  low_median_vaf <- ifelse((variant_recurrent | locus_recurrent) &
+                             !is.na(x$variant_median_vaf) & x$variant_median_vaf < 0.08, 0.2, 0)
   bounded01(pmax(a, b) + low_median_vaf)
 }
 
@@ -290,7 +293,16 @@ classify_technical_artifact_evidence <- function(x, cfg) {
 classify_internal_recurrence <- function(x, cfg) {
   variant_artifact <- isTRUE_vec(cohort_recurrent_flag(x, cfg, "variant"))
   locus_artifact <- isTRUE_vec(cohort_recurrent_flag(x, cfg, "locus"))
-  tumor_supported <- !is.na(x$variant_tumor_type_freq) & x$variant_tumor_type_freq >= 0.05 & x$variant_tumor_type_freq >= x$variant_cohort_freq
+  col <- function(name) if (name %in% names(x)) x[[name]] else rep(NA_real_, nrow(x))
+  min_cohort <- cfg_get(cfg, c("cohort", "min_cohort_size_for_recurrence"), 10)
+  min_n <- cfg_get(cfg, c("cohort", "min_recurrent_samples"), 3)
+  tumor_total <- col("tumor_type_total_samples")
+  tumor_n <- col("variant_tumor_type_n_samples")
+  tumor_evaluable <- !is.na(tumor_total) & tumor_total >= min_cohort &
+    !is.na(tumor_n) & tumor_n >= min_n
+  tumor_supported <- tumor_evaluable &
+    !is.na(x$variant_tumor_type_freq) & x$variant_tumor_type_freq >= 0.05 &
+    x$variant_tumor_type_freq >= x$variant_cohort_freq
   gene_only <- !is.na(x$variant_cohort_freq) & x$variant_cohort_freq >= 0.02
 
   category <- rep("recurrence_non_informative", nrow(x))

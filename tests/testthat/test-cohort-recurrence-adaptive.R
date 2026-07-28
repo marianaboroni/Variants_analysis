@@ -56,6 +56,13 @@ test_that("cohort_artifact_score contributes nothing when the cohort is too smal
   expect_equal(cohort_artifact_score(x, cfg_default), 0)
 })
 
+test_that("cohort_artifact_score does not use low median VAF as recurrence evidence in a tiny cohort", {
+  x <- data.frame(variant_cohort_freq = 1.0, locus_cohort_freq = 1.0,
+                   variant_n_samples = 1, locus_n_samples = 1, total_samples = 1,
+                   variant_median_vaf = 0.03)
+  expect_equal(cohort_artifact_score(x, cfg_default), 0)
+})
+
 test_that("recurrent_germline_signal: N=2 contributes 0 regardless of freq; adequate N+count triggers it", {
   small <- data.frame(variant_n_samples = 1, variant_cohort_freq = 1.0, total_samples = 2)
   expect_equal(recurrent_germline_signal(small, cfg_default), 0)
@@ -96,6 +103,25 @@ test_that("classify_internal_recurrence: not-evaluable cohort -> recurrence_non_
   x <- data.frame(variant_cohort_freq = 1.0, locus_cohort_freq = 1.0,
                    variant_n_samples = 1, locus_n_samples = 1, total_samples = 2,
                    variant_tumor_type_freq = NA_real_)
+  expect_equal(classify_internal_recurrence(x, cfg_default), "recurrence_non_informative")
+})
+
+test_that("classify_internal_recurrence: one sample is not tumor-type recurrence support", {
+  x <- data.frame(variant_cohort_freq = 1.0, locus_cohort_freq = 1.0,
+                   variant_n_samples = 1, locus_n_samples = 1, total_samples = 1,
+                   variant_tumor_type_n_samples = 1, tumor_type_total_samples = 1,
+                   variant_tumor_type_freq = 1.0)
+  expect_equal(classify_internal_recurrence(x, cfg_default), "recurrence_non_informative")
+})
+
+test_that("classify_internal_recurrence: tumor-type support needs evaluable sample counts", {
+  x <- data.frame(variant_cohort_freq = 0.10, locus_cohort_freq = 0.10,
+                   variant_n_samples = 2, locus_n_samples = 2, total_samples = 20,
+                   variant_tumor_type_n_samples = 3, tumor_type_total_samples = 20,
+                   variant_tumor_type_freq = 0.15)
+  expect_equal(classify_internal_recurrence(x, cfg_default), "recurrence_tumor_type_supported")
+
+  x$variant_tumor_type_n_samples <- 2
   expect_equal(classify_internal_recurrence(x, cfg_default), "recurrence_non_informative")
 })
 

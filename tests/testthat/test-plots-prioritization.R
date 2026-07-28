@@ -37,3 +37,16 @@ test_that("create_maftools_plots produces summary+oncoplot as PNG+PDF and skips 
     expect_true(all(file.exists(fs)) && all(file.info(fs)$size > 0))
   }
 })
+
+test_that("save_plot_pair keeps plotting sidecar files inside the output directory", {
+  out_dir <- tempfile("plots")
+  original_wd <- getwd()
+  files <- save_plot_pair(out_dir, "sidecar_check", function() {
+    plot.new()
+    writeLines("sidecar", "sidecar_check.tsv")
+  }, width = 3, height = 3)
+  expect_equal(getwd(), original_wd)
+  expect_true(all(file.exists(files)))
+  expect_true(file.exists(file.path(out_dir, "sidecar_check.tsv")))
+  expect_false(file.exists(file.path(original_wd, "sidecar_check.tsv")))
+})

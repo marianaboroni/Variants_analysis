@@ -1,5 +1,6 @@
 input:
   variants: "data/test/WGS_all_patients_first100k.tsv"
+  genome_build: GRCh38
   delimiter: "\t"
   sample_qc: null
   sample_metadata: null

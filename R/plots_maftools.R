@@ -24,6 +24,10 @@ load_maf_object <- function(maf_path, sample_metadata = NULL) {
 
 #' @keywords internal
 save_plot_pair <- function(out_dir, name, draw, width = 9, height = 7) {
+  dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
+  out_dir <- normalizePath(out_dir, mustWork = TRUE)
+  old_wd <- setwd(out_dir)
+  on.exit(setwd(old_wd), add = TRUE)
   files <- character()
   pdf_path <- file.path(out_dir, paste0(name, ".pdf"))
   png_path <- file.path(out_dir, paste0(name, ".png"))

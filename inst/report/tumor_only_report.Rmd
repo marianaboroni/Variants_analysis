@@ -26,6 +26,20 @@ schema <- rd("input_schema_report.tsv"); oncokb <- rd("oncokb_annotations.tsv.gz
 plotman <- tryCatch(as.data.frame(data.table::fread(file.path(run_dir, "plots", "plot_manifest.tsv"))),
                     error = function(e) NULL)
 has_dt <- requireNamespace("DT", quietly = TRUE)
+resolve_plot_path <- function(path) {
+  if (length(path) == 0 || is.na(path) || !nzchar(path)) return(path)
+  is_abs <- grepl("^(/|[A-Za-z]:[/\\\\])", path)
+  if (is_abs && file.exists(path)) return(normalizePath(path, mustWork = FALSE))
+  if (file.exists(path)) return(normalizePath(path, mustWork = FALSE))
+  if (grepl("/plots/", path, fixed = TRUE)) {
+    rel <- sub("^.*?/plots/", "", path)
+    candidate <- file.path(run_dir, "plots", rel)
+    if (file.exists(candidate)) return(normalizePath(candidate, mustWork = FALSE))
+  }
+  candidate <- file.path(run_dir, "plots", basename(path))
+  if (file.exists(candidate)) return(normalizePath(candidate, mustWork = FALSE))
+  path
+}
 g <- function(x, d = "NA") if (is.null(x) || length(x) == 0 || is.na(x[1])) d else x[1]
 cnt <- function(cond) if (is.null(v_all) || !length(cond)) 0 else sum(cond, na.rm = TRUE)
 n_input <- g(manifest$n_input_variants, if (!is.null(v_all)) nrow(v_all) else 0)
@@ -167,7 +181,7 @@ if (!is.null(plotman)) {
   for (i in seq_len(nrow(ok))) {
     fs <- strsplit(ok$files[i], ";", fixed = TRUE)[[1]]
     png <- fs[grepl("[.]png$", fs)]
-    if (length(png)) cat(sprintf("\n### %s\n\n![](%s)\n\n", ok$plot[i], png[1]))
+    if (length(png)) cat(sprintf("\n### %s\n\n![](%s)\n\n", ok$plot[i], resolve_plot_path(png[1])))
     else cat(sprintf("\n### %s — %s\n", ok$plot[i], paste(basename(fs), collapse = ", ")))
   }
 } else cat("No maftools plots produced.\n")

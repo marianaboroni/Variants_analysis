@@ -1,5 +1,6 @@
 input:
   variants: "/Users/marianaboroni/Downloads/WGS_all_patients.tsv.gz"
+  genome_build: GRCh38
   delimiter: "\t"
   sample_qc: null
   sample_metadata: null

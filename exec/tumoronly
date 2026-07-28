@@ -25,18 +25,24 @@ find_pkg_root <- function() {
 }
 
 load_package <- function() {
+  root <- find_pkg_root()
+  r_dir <- file.path(root, "R")
+  source_files <- if (dir.exists(r_dir)) {
+    list.files(r_dir, pattern = "[.]R$", full.names = TRUE)
+  } else character()
+  if (length(source_files) > 0) {
+    first <- file.path(r_dir, c("utils.R", "io.R", "config.R", "input.R"))
+    source_files <- c(intersect(first, source_files), setdiff(source_files, first))
+    for (f in source_files) sys.source(f, envir = globalenv())
+    Sys.setenv(TUMORONLY_R_DIR = r_dir)
+    return(invisible(FALSE))
+  }
   if (requireNamespace("tumoronly", quietly = TRUE)) {
     suppressPackageStartupMessages(library(tumoronly))
     return(invisible(TRUE))
   }
-  root <- find_pkg_root()
-  r_dir <- file.path(root, "R")
-  files <- list.files(r_dir, pattern = "[.]R$", full.names = TRUE)
-  first <- file.path(r_dir, c("utils.R", "io.R", "config.R", "input.R"))
-  files <- c(intersect(first, files), setdiff(files, first))
-  for (f in files) sys.source(f, envir = globalenv())
-  Sys.setenv(TUMORONLY_R_DIR = r_dir)
-  invisible(FALSE)
+  stop("Could not load tumoronly: no source R/*.R files found and installed package is unavailable.",
+       call. = FALSE)
 }
 
 get_opt <- function(args, name, default = NULL) {
