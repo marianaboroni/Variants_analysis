@@ -1,107 +1,76 @@
-# tumoronly quick start
+# Quick Start
 
-This guide runs the v2 workflow on a TSV, VCF, or MAF input.
+This guide runs the v2 workflow on the included demo data.
 
-Tumor-only classifications are probabilistic. A result can be classified as a
-high-confidence somatic candidate, likely germline-like, or likely artifact-like,
-but it is not clinical confirmation without matched normal or orthogonal
+Tumor-only classifications are probabilistic candidates. They are not clinical
+confirmation of somatic or germline status without matched-normal or orthogonal
 validation.
 
-## 1. Install
-
-From the repository root:
+## 1. Install From a Checkout
 
 ```bash
 Rscript -e 'install.packages(c("data.table","yaml","jsonlite","digest"), repos="https://cloud.r-project.org")'
 R CMD INSTALL .
 ```
 
-Optional but recommended for reports and figures:
+Recommended for report and figures:
 
 ```bash
 Rscript -e 'install.packages(c("ggplot2","rmarkdown","knitr"), repos="https://cloud.r-project.org")'
 ```
 
-If working from a checkout, the source-tree CLI also works without installation:
-
-```bash
-Rscript exec/tumoronly doctor
-```
-
-## 2. Create a config
-
-```bash
-Rscript exec/tumoronly init --output config.yaml
-```
-
-Edit at least:
-
-```yaml
-input:
-  path: variants.tsv
-  genome_build: GRCh38
-
-analysis:
-  output_dir: results
-```
-
-## 3. Validate the input
+## 2. Validate
 
 ```bash
 Rscript exec/tumoronly validate \
-  --input variants.tsv \
-  --config config.yaml \
-  --output validation.html
+  --input data/demo/variants.tsv \
+  --config config/demo_v2.yml \
+  --output results/demo_v2_validation.html
 ```
 
-Do not continue if validation reports errors. Warnings mean the run can proceed,
-but the report and `logs/warnings.tsv` must be interpreted carefully.
+Validation must return `PASS` before a strict run. Warnings are expected for
+small demo data when evidence such as cohort recurrence or COSMIC is not
+available.
 
-## 4. Run
+## 3. Run
 
 ```bash
 Rscript exec/tumoronly run \
-  --input variants.tsv \
-  --config config.yaml \
-  --output results
+  --input data/demo/variants.tsv \
+  --config config/demo_v2.yml \
+  --output results/demo_v2 \
+  --run-id quickstart_demo
 ```
 
-The same workflow is available from R:
+The same run from R:
 
 ```r
 library(tumoronly)
 
 result <- run_tumoronly(
-  input = "variants.tsv",
-  config = "config.yaml",
-  output_dir = "results"
+  input = "data/demo/variants.tsv",
+  config = "config/demo_v2.yml",
+  output_dir = "results/demo_v2",
+  run_id = "quickstart_api_demo"
 )
 ```
 
-## 5. Open the report
+## 4. Read the Outputs
 
-The run writes:
+Open:
 
 ```text
-results/<run_id>/report.html
+results/demo_v2/quickstart_demo/report.html
 ```
-
-If needed, re-render:
-
-```bash
-Rscript exec/tumoronly report --run-dir results/<run_id>
-```
-
-## 6. Read the key outputs
 
 Start with:
 
 - `report.html`
+- `run_manifest.json`
+- `logs/warnings.tsv`
 - `tables/classified_variants.tsv`
 - `tables/sample_summary.tsv`
 - `tables/filter_audit.tsv`
-- `logs/warnings.tsv`
-- `run_manifest.json`
 
 For each variant, inspect:
 
@@ -112,4 +81,7 @@ For each variant, inspect:
 - `evidence_against_classification`
 - `missing_evidence`
 - `classification_explanation`
+
+Continue with [TUTORIAL.md](TUTORIAL.md) for a full walkthrough, including an
+installed-package example.
 

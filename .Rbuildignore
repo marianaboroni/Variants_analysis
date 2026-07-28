@@ -25,6 +25,7 @@
 ^Dockerfile$
 ^environment\.yml$
 ^QUICKSTART\.md$
+^TUTORIAL\.md$
 ^INSTALLATION\.md$
 ^INPUT_FORMAT\.md$
 ^HOW_IT_WORKS\.md$

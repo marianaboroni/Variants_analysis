@@ -1,0 +1,7 @@
+sample_id	tumor_type	assay	tumor_purity
+S1	UCEC	WGS	0.60
+S2	UCEC	WGS	0.55
+S3	UCEC	WGS	0.70
+S4	UCEC	WGS	0.65
+S5	UCEC	WGS	0.75
+

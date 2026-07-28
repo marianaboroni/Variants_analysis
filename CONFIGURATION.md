@@ -1,18 +1,20 @@
 # Configuration
 
-Create a template:
+Create a v2 template:
 
 ```bash
 Rscript exec/tumoronly init --output config.yaml
 ```
 
-All v2 defaults are centralized in `tumoronly_default_config()`.
+All defaults are centralized in `tumoronly_default_config()`. A runnable demo is
+available at `config/demo_v2.yml`.
 
-## Minimal config
+## Minimal Config
 
 ```yaml
 input:
   path: variants.tsv
+  format: auto
   genome_build: GRCh38
 
 analysis:
@@ -29,22 +31,45 @@ technical_filters:
   min_mmq: 40
 ```
 
-## Important sections
+## Important Sections
 
 | Section | Purpose |
 |---|---|
-| `input` | file paths, genome build, column mapping |
+| `input` | file path, input format, genome build, sample metadata, column mapping |
 | `analysis` | output directory, run id, threads |
-| `hard_filters` | fail-safe technical gate |
-| `technical_filters` | depth, VAF, quality thresholds |
-| `population_filters` | global AF thresholds and columns |
-| `cohort` | recurrence thresholds and minimum cohort size |
-| `scoring` | classification score thresholds |
+| `validation` | strict/permissive behavior |
+| `hard_filters` | fail-safe technical gate and accepted caller filters |
+| `adaptive_filtering` | per-sample threshold review behavior |
+| `technical_filters` | depth, alt-read, VAF, TLOD, base-quality, mapping-quality thresholds |
+| `population_filters` | global population AF thresholds and source columns |
+| `cohort` | recurrence thresholds and minimum sample count |
+| `scoring` | score cutoffs for conservative tumor-only classes |
 | `driver_resources` | optional driver-gene and hotspot references |
-| `cosmic` | optional COSMIC database configuration |
-| `report` | report and top-variant display options |
+| `driver_scoring` | driver evidence thresholds |
+| `cosmic` | optional processed COSMIC resource; missing COSMIC is reported as missing evidence |
+| `report` | report format, theme, and number of prioritized variants |
 
-## Reproducibility
+## Explicit Column Mapping
+
+Autodetection handles common aliases. Use `input.column_map` when column names
+are custom:
+
+```yaml
+input:
+  path: variants.tsv
+  genome_build: GRCh38
+  column_map:
+    chrom: chromosome_name
+    pos: start_position
+    ref: ref_allele
+    alt: alt_allele
+    sample_id: sample
+```
+
+Mapping identifies columns only. It does not transform allele values, change
+positions, or fill missing evidence.
+
+## Reproducibility Files
 
 Each run writes:
 
@@ -53,5 +78,6 @@ Each run writes:
 - `run_manifest.json`
 - `session_info.txt`
 
-These files are the first place to look when reproducing or auditing a run.
+Use these files to reproduce a run, audit thresholds, and record the package
+version, commit, input checksum, warnings, runtime, and environment.
 

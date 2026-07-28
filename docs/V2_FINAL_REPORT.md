@@ -16,7 +16,8 @@ publication figure/documentation acceptance suite are not finished.
 | `173cdc3` | documented the v2 workflow and input contract |
 | `b05cd2c` | added v2 CLI/API entry points |
 | `f17774b` | added traceable v2 outputs, manifest, evidence columns, and figures |
-| packaging/docs stage | adds installation docs, Docker/Conda/CI files, man pages, and check fixes |
+| `d6f3acc` | added installation docs, Docker/Conda/CI files, man pages, and check fixes |
+| documentation alignment stage | rewrites README/tutorial/docs around the current v2 workflow only |
 
 ## Real-data validation
 
@@ -165,6 +166,7 @@ Result: PASS with warnings
 
 - `INSTALLATION.md`
 - `QUICKSTART.md`
+- `TUTORIAL.md`
 - `INPUT_FORMAT.md`
 - `CONFIGURATION.md`
 - `HOW_IT_WORKS.md`
@@ -175,10 +177,41 @@ Result: PASS with warnings
 - `Dockerfile`
 - `environment.yml`
 - `.github/workflows/R-CMD-check.yaml`
+- `config/demo_v2.yml`
+- `inst/extdata/demo_variants.tsv`
+- `inst/extdata/demo_sample_metadata.tsv`
+
+The README, quick start, tutorial, installation guide, configuration guide,
+architecture guide, report guide, and vignette entry point have been rewritten
+around `init`, `validate`, `run`, and `report`. Legacy references to TMB,
+clonality, ancestry, dashboard, ML, and obsolete output tables were removed from
+the user-facing v2 documentation or reframed explicitly as out of scope.
 
 These files have been added, but a clean installation from each route still
 needs final execution for Conda, Docker, and remote GitHub Actions. Local
 tarball installation and installed-CLI validation have passed.
+
+Documentation validation after this stage:
+
+```text
+Rscript exec/tumoronly init --output /tmp/tumoronly_doc_config.yml --force
+Result: OK
+
+Rscript exec/tumoronly validate --input data/demo/variants.tsv --config config/demo_v2.yml --output results/demo_v2_validation.html
+Result: PASS with expected W_COHORT_RECURRENCE_NOT_EVALUABLE warning
+
+Rscript exec/tumoronly run --input data/demo/variants.tsv --config config/demo_v2.yml --output results/demo_v2 --run-id quickstart_demo
+Result: completed; report.html, tables, figures, figure_data, logs, and manifests written
+
+Clean tarball install into a temporary library, followed by API and installed-CLI demo using inst/extdata
+Result: OK
+
+Rscript -e 'testthat::test_dir("tests/testthat", reporter = "summary")'
+Result: 0 failures, 1 skipped, 7 known COSMIC/FASTA warnings
+
+R CMD check --no-manual --no-build-vignettes tumoronly_0.1.0.tar.gz
+Result: Status OK
+```
 
 ## Limitations still open
 

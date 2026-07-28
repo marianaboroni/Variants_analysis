@@ -1,83 +1,85 @@
 # Installation
 
-The current package layout has `DESCRIPTION` at the repository root.
+The package root is the repository root.
 
-## GitHub installation
+## GitHub
 
 ```r
 install.packages("remotes", repos = "https://cloud.r-project.org")
 remotes::install_github("marianaboroni/Variants_analysis")
-```
-
-Then verify:
-
-```r
 library(tumoronly)
-tumoronly_default_config()
+check_installation()
 ```
 
-## Local development installation
+The installed CLI script can be located with:
+
+```bash
+TO_CLI="$(Rscript -e 'cat(system.file("exec", "tumoronly", package = "tumoronly"))')"
+Rscript "$TO_CLI" init --output /tmp/tumoronly_config.yml --force
+```
+
+The CLI currently expects invocation through `Rscript "$TO_CLI"` after package
+installation. In a source checkout, use `Rscript exec/tumoronly`.
+
+## Local Development
 
 ```bash
 git clone https://github.com/marianaboroni/Variants_analysis.git
 cd Variants_analysis
+Rscript -e 'install.packages(c("data.table","yaml","jsonlite","digest"), repos="https://cloud.r-project.org")'
 R CMD INSTALL .
 Rscript -e 'library(tumoronly); check_installation()'
 ```
 
-## Source-tree CLI
-
-When developing from a checkout, use:
+Recommended for HTML reports and figures:
 
 ```bash
-Rscript exec/tumoronly doctor
-Rscript exec/tumoronly init --output config.yaml
+Rscript -e 'install.packages(c("ggplot2","rmarkdown","knitr"), repos="https://cloud.r-project.org")'
 ```
 
-The CLI loads local `R/*.R` files before falling back to an installed package,
-which keeps development runs tied to the checked-out source.
-
 ## Conda
-
-Create an environment from `environment.yml`:
 
 ```bash
 conda env create -f environment.yml
 conda activate tumoronly
 R CMD INSTALL .
-Rscript exec/tumoronly doctor
+Rscript -e 'library(tumoronly); check_installation()'
+```
+
+Run the demo from the checkout:
+
+```bash
+Rscript exec/tumoronly validate --input data/demo/variants.tsv --config config/demo_v2.yml
 ```
 
 ## Docker
 
-Build and run:
-
 ```bash
 docker build -t tumoronly:dev .
-docker run --rm -v "$PWD":/work -w /work tumoronly:dev Rscript exec/tumoronly doctor
+docker run --rm -v "$PWD":/work -w /work tumoronly:dev R CMD INSTALL .
+docker run --rm -v "$PWD":/work -w /work tumoronly:dev Rscript exec/tumoronly validate --input data/demo/variants.tsv --config config/demo_v2.yml
 ```
 
-## Required R packages
+## Dependencies
 
-Core:
+Core dependencies:
 
 - `data.table`
 - `yaml`
 - `jsonlite`
 - `digest`
 
-Recommended:
+Recommended dependencies:
 
 - `ggplot2`
 - `rmarkdown`
 - `knitr`
 - `maftools`
 
-Optional specialized packages:
+Optional specialized dependencies:
 
-- `GenomicRanges`, `IRanges`, `rtracklayer`, `Biostrings` for reference and
-  liftover workflows.
-- `httr2` for optional OncoKB post-hoc annotation.
+- `GenomicRanges`, `IRanges`, `rtracklayer`, `Biostrings` for reference-backed
+  and liftover-related workflows.
+- `httr2` for optional post-hoc annotation workflows.
 
-Core tumoronly analysis does not require credentials.
-
+The core v2 analysis does not require credentials.

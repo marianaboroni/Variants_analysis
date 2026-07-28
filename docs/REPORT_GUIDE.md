@@ -1,30 +1,56 @@
-# Report guide
+# v2 Report Guide
 
-`inst/report/tumor_only_report.Rmd` → `report/tumor_only_report.html`
-(self-contained). Designed so a reviewer sees the key findings without opening
-multiple tables.
+Every v2 run writes a root-level report:
 
-## Structure
+```text
+results/<run_id>/report.html
+```
 
-1. **Executive summary** (first screen): colored cards — input variants, retained,
-   excluded, manual review, high priority, in hotspots, computational support,
-   COSMIC same-tumor — plus run/build/format/OncoKB status.
-2. **Principais achados**: auto-generated bullet findings.
-3. **Alerts**: build unconfirmed, missing fields, low predictor coverage, no tumor
-   metadata, COSMIC without context, VCF without CSQ, MAF/TSV mapping issues,
-   over-exclusion, no retained variants, plots skipped, OncoKB unavailable, …
-4. **Top prioritized variants**: interactive `DT` table (search/sort/filter,
-   tooltips, CSV export) — the single consolidated review table.
-5. **Details** (tabset): Data quality · Filtering funnel · Functional predictors ·
-   COSMIC evidence (global vs contextual) · maftools visualizations · Excluded
-   variants · Provenance & parameters.
-6. **Limitations**.
+The legacy template path `report/tumor_only_report.html` may still be present
+inside a run directory for compatibility, but `report.html` is the user-facing
+v2 entry point.
 
-Each analytical section carries a short *"What this shows / How to interpret"*
-note. Full tables remain downloadable under `tables/` (gzipped TSVs). Friendly
-labels are used in prose while technical column names remain in the tables and
-tooltips.
+## Expected Sections
 
-If `rmarkdown`/pandoc or `DT` is unavailable, `render_tumor_only_report()` falls
-back to a self-contained HTML built directly from the run tables (no interactivity
-but the same executive summary, funnel, retained/COSMIC sections and limitations).
+The current report summarizes:
+
+- input data and cohort;
+- validation issues and warnings;
+- quality-control metrics;
+- filtering workflow;
+- classification counts;
+- prioritized variants;
+- per-variant evidence columns;
+- limitations and reproducibility metadata.
+
+## Evidence Language
+
+Report text must use candidate language:
+
+- `classified as high-confidence somatic candidate`;
+- `consistent with a likely germline event`;
+- `flagged as a likely technical artifact`;
+- `requires matched-normal or orthogonal confirmation for clinical use`.
+
+It must not claim that a tumor-only call is clinically confirmed somatic or
+germline.
+
+## Source Files
+
+The report should be interpreted with:
+
+- `tables/classified_variants.tsv`
+- `tables/filter_audit.tsv`
+- `tables/sample_summary.tsv`
+- `logs/warnings.tsv`
+- `run_manifest.json`
+- `config_used.yaml`
+- `session_info.txt`
+
+Figure source data are stored in `figure_data/*.tsv`.
+
+## Current Limitation
+
+The current v2 report is functional and generated automatically, but the full
+publication-style 16-section narrative report remains a release-readiness item
+tracked in `docs/V2_FINAL_REPORT.md`.

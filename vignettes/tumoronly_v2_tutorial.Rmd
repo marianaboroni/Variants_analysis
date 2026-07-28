@@ -1,0 +1,126 @@
+---
+title: "tumoronly v2 reproducible tutorial"
+author: "Mariana Boroni lab"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_depth: 2
+vignette: >
+  %\VignetteIndexEntry{tumoronly v2 reproducible tutorial}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  warning = FALSE,
+  message = FALSE
+)
+```
+
+# Scope
+
+This vignette mirrors `TUTORIAL.md`. It documents the current v2 workflow:
+
+```text
+init -> validate -> run -> report
+```
+
+Tumor-only classes are probabilistic candidates. They should not be reported as
+confirmed clinical somatic or germline calls without matched-normal or
+orthogonal validation.
+
+# Source-checkout run
+
+From the repository root:
+
+```{bash validate-demo, eval=FALSE}
+Rscript exec/tumoronly validate \
+  --input data/demo/variants.tsv \
+  --config config/demo_v2.yml \
+  --output results/demo_v2_validation.html
+```
+
+```{bash run-demo, eval=FALSE}
+Rscript exec/tumoronly run \
+  --input data/demo/variants.tsv \
+  --config config/demo_v2.yml \
+  --output results/demo_v2 \
+  --run-id tutorial_demo
+```
+
+```{bash report-demo, eval=FALSE}
+Rscript exec/tumoronly report \
+  --run-dir results/demo_v2/tutorial_demo \
+  --output results/demo_v2/tutorial_demo/report.html
+```
+
+# Installed-package run
+
+```{r installed-demo, eval=FALSE}
+library(tumoronly)
+library(yaml)
+
+variants <- system.file("extdata", "demo_variants.tsv", package = "tumoronly")
+metadata <- system.file("extdata", "demo_sample_metadata.tsv", package = "tumoronly")
+
+cfg <- tumoronly_default_config()
+cfg$input$path <- variants
+cfg$input$genome_build <- "GRCh38"
+cfg$input$sample_metadata <- metadata
+cfg$analysis$output_dir <- "results/installed_demo"
+yaml::write_yaml(cfg, "installed_demo_config.yml")
+
+validation <- validate_tumoronly_input(
+  config = "installed_demo_config.yml",
+  output = "installed_demo_validation.html"
+)
+stopifnot(isTRUE(validation$ok))
+
+result <- run_tumoronly(
+  config = "installed_demo_config.yml",
+  run_id = "installed_demo"
+)
+
+result$run_dir
+```
+
+# Outputs
+
+Each v2 run writes:
+
+```text
+report.html
+run_manifest.json
+config_used.yaml
+session_info.txt
+logs/warnings.tsv
+tables/classified_variants.tsv
+tables/sample_summary.tsv
+tables/filter_audit.tsv
+tables/high_confidence_somatic.tsv
+tables/likely_germline.tsv
+tables/likely_artifact.tsv
+tables/known_drivers.tsv
+figures/*.pdf
+figures/*.svg
+figures/*.png
+figure_data/*.tsv
+```
+
+The key per-variant evidence columns are:
+
+- `evidence_supporting_classification`;
+- `evidence_against_classification`;
+- `missing_evidence`;
+- `classification_explanation`.
+
+# Real-data gate
+
+The demo is not the validation gate. The v2 workflow was run on
+`data/test/WGS_all_patients_first100k.tsv`; details are recorded in
+`docs/REAL_DATA_VALIDATION.md`.
+

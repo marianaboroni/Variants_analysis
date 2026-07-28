@@ -1,0 +1,124 @@
+analysis:
+  output_dir: results/demo_v2
+  run_id: null
+  threads: 1
+
+input:
+  path: data/demo/variants.tsv
+  format: auto
+  genome_build: GRCh38
+  sample_metadata: data/demo/sample_metadata.tsv
+  column_map: null
+
+validation:
+  strict: true
+
+cohort:
+  cancer_type: UCEC
+  min_cohort_size_for_recurrence: 10
+  min_recurrent_samples: 3
+  min_recurrent_locus_samples: 3
+  recurrent_variant_fraction_artifact: 0.30
+  recurrent_locus_fraction_artifact: 0.40
+
+cancer:
+  default_tumor_type: UCEC
+
+hard_filters:
+  enabled: true
+  assay: WGS
+  adaptive_depth_fraction: 0.35
+  adaptive_q25_depth_fraction: 0.50
+  missing_required_metrics_fail: false
+  caller_filter_accepted_values:
+    - PASS
+
+adaptive_filtering:
+  enabled: true
+  escalate_to_review: true
+
+technical_filters:
+  min_depth: 20
+  min_alt_count_snv: 5
+  min_alt_count_indel: 8
+  min_af_snv: 0.03
+  min_af_indel: 0.05
+  min_tlod: 6
+  min_mbq: 25
+  min_mmq: 40
+
+population_filters:
+  common_af: 0.005
+  rare_af: 0.001
+  use_population_columns:
+    - gnomADg_AF
+
+scoring:
+  high_confidence_somatic: 0.75
+  probable_somatic: 0.55
+  probable_germline: 0.70
+  probable_artifact: 0.70
+  validation_rescue_somatic_min: 0.45
+
+guideline_classification:
+  enabled: true
+  somatic:
+    benign_maf_very_strong: 0.05
+    benign_maf_strong: 0.01
+    absent_population_af: 0.00001
+    cosmic_moderate_count: 3
+    cosmic_high_count: 10
+  germline:
+    ba1_af: 0.05
+    bs1_af: 0.01
+    pm2_af: 0.00001
+
+cosmic:
+  processed_db: null
+  release: null
+
+driver_resources:
+  driver_genes: data/demo/driver_genes.tsv
+  driver_genes_delimiter: "\t"
+  hotspots: data/demo/hotspots.tsv
+  hotspots_delimiter: "\t"
+
+driver_scoring:
+  known_driver: 0.75
+  probable_driver: 0.60
+  possible_driver: 0.40
+  min_tumor_type_samples_for_recurrence_driver: 5
+
+predictors:
+  detect_automatically: true
+  use_for_prioritization: true
+  use_for_filtering: false
+
+authenticity:
+  likely_true_min: 0.66
+  likely_artifact_max: 0.40
+
+population:
+  global:
+    common_af: 0.01
+    rare_af: 0.001
+  brazilian:
+    db: null
+    common_af: 0.01
+    review_af: 0.001
+    minimum_allele_count: 2
+    escalate_to_review: true
+  local_controls:
+    path: null
+    artifact_or_germline_af: 0.005
+    minimum_observations: 2
+
+ancestry:
+  enabled: false
+
+report:
+  format:
+    - html
+  theme: publication
+  top_variants: 30
+

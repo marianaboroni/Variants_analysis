@@ -372,9 +372,14 @@ update_tumoronly_run_manifests <- function(run_dir, manifest, report_rendered = 
 
 git_commit_id <- function() {
   root <- normalizePath(getwd(), mustWork = FALSE)
-  out <- tryCatch(system2("git", c("-C", root, "rev-parse", "--short", "HEAD"),
-                          stdout = TRUE, stderr = FALSE),
-                  error = function(e) NA_character_)
+  if (!nzchar(Sys.which("git")) || !dir.exists(file.path(root, ".git"))) {
+    return(NA_character_)
+  }
+  out <- suppressWarnings(tryCatch(
+    system2("git", c("-C", root, "rev-parse", "--short", "HEAD"),
+            stdout = TRUE, stderr = FALSE),
+    warning = function(w) NA_character_,
+    error = function(e) NA_character_))
   if (length(out) == 0 || is.na(out[[1]]) || !nzchar(out[[1]])) NA_character_ else out[[1]]
 }
 

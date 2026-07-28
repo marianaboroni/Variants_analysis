@@ -1,11 +1,11 @@
 #!/usr/bin/env Rscript
 
 # Single entry point for the tumoronly package.
-#   tumoronly doctor
-#   tumoronly prepare-cosmic  --config config.yml [--force]
-#   tumoronly run             --config config.yml [--run-id ID]
-#   tumoronly annotate-oncokb --run-dir results/ID [--scope retained|all]
-#   tumoronly report          --run-dir results/ID
+# v2 primary commands:
+#   tumoronly init
+#   tumoronly validate
+#   tumoronly run
+#   tumoronly report
 #
 # If the package is installed it is loaded with library(); otherwise the R/
 # sources are loaded through a SINGLE dev loader (no long source() chains).
@@ -66,21 +66,13 @@ main <- function() {
   argv <- commandArgs(trailingOnly = TRUE)
   if (length(argv) == 0) {
     cat("Usage: tumoronly <command> [options]\n",
-        "  init | validate | run | report | doctor\n",
+        "  init | validate | run | report\n",
         "  init     --output config.yml [--force]\n",
         "  validate --input variants.tsv --config config.yml [--output validation.html] [--permissive]\n",
         "  run      --input variants.tsv --config config.yml --output results/ [--run-id ID] [--permissive] [--skip-validation]\n",
         "  report   --run-dir results/ID [--output report.html]\n",
-        "  prepare-cosmic | annotate-oncokb\n",
-        "  build-cosmic-input --config config.yml [--force]   (build cosmic.raw_file from raw COSMIC v104 files)\n",
-        "  prepare-abraom      --config config.yml [--force]   (build population.brazilian.db from an ANNOVAR TSV)\n",
-        "  prepare-ancestry-reference --config config.yml\n",
-        "  infer-ancestry --run-dir results/ID | ancestry-report --run-dir results/ID\n",
-        "  export-review-template --run-dir DIR\n",
-        "  import-reviews --file reviews.tsv [--db-dir db/variant_evidence]\n",
-        "  training-status | build-training-set --run-dir DIR | train-model |\n",
-        "  evaluate-model --model-id ID | activate-model --model-id ID --approve | rollback-model\n",
-        "    [--db-dir db/variant_evidence] [--objective P_TRUE_VARIANT]\n", sep = "")
+        "\nAdvanced maintenance commands are retained for compatibility but are not\n",
+        "part of the v2 quickstart workflow.\n", sep = "")
     quit(status = 1)
   }
   cmd <- argv[1]

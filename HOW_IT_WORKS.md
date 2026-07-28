@@ -1,7 +1,9 @@
 # How it works
 
-This page describes the current scientific workflow. OncoKB is optional and
-post-hoc; it never changes filtering decisions.
+This page describes the current v2 scientific workflow. The user-facing path is
+`init -> validate -> run -> report`. Optional external resources can add
+evidence, but they do not turn tumor-only candidates into clinical
+confirmation.
 
 ## 1. Input validation
 
@@ -89,3 +91,5 @@ post-hoc; it never changes filtering decisions.
 - Limitation: the current v2 figure set covers QC and classification; additional
   publication figures are still planned.
 
+Archived TMB, clonality, ancestry, dashboard, and ML workflows are not part of
+the v2 core workflow.

@@ -1,7 +1,9 @@
 # Input format
 
 `tumoronly` accepts VCF, MAF, TSV, TXT, and gzipped variants of those formats.
-The input may represent one sample or a cohort.
+The input may represent one sample or a cohort. The runnable demo input is
+`data/demo/variants.tsv`; the installed package copy is available as
+`system.file("extdata", "demo_variants.tsv", package = "tumoronly")`.
 
 ## Required biological fields
 
@@ -80,6 +82,9 @@ Rscript exec/tumoronly validate --input variants.tsv --config config.yaml --perm
 Permissive mode does not invent missing data. It only changes whether selected
 missing-evidence conditions block execution.
 
+Validation writes a summary of detected columns, missingness, warnings, and
+errors. The same ingestion code is used by validation and by `run_tumoronly()`.
+
 ## Cohorts
 
 A cohort can be one multi-sample file or a YAML list of single-sample files:
@@ -94,4 +99,3 @@ input:
 
 Recurrence evidence is disabled below `cohort.min_cohort_size_for_recurrence`
 because fractions are not meaningful in tiny cohorts.
-

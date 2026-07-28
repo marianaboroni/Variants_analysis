@@ -5,13 +5,14 @@ Authors@R: person("Mariana", "Boroni", email = "marianaboroni@gmail.com",
     role = c("aut", "cre"))
 Author: Mariana Boroni [aut, cre]
 Maintainer: Mariana Boroni <marianaboroni@gmail.com>
-Description: A reproducible pipeline for tumor-only somatic variant analysis.
-    It reads a VEP-annotated VCF, validates the genome build, applies a
-    documented and auditable set of tumor-only filters, annotates variants
-    against a locally-prepared COSMIC database (lifted over once at build
-    time), exports a maftools-compatible MAF, and renders an explanatory
-    HTML report. OncoKB annotation is a separate, optional step that never
-    alters filtering decisions.
+Description: A reproducible pipeline for tumor-only variant filtering,
+    classification, and reporting. It ingests VCF, MAF, TSV, TXT, and gzipped
+    variant files; validates the input schema and genome build; applies
+    documented fail-safe tumor-only filters; scores technical, population,
+    artifact, and somatic-candidate evidence; writes traceable per-variant
+    explanations; and generates tables, figures, manifests, and an HTML report.
+    Tumor-only classifications are probabilistic candidates and are not
+    clinical confirmation without matched-normal or orthogonal validation.
 License: MIT + file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
