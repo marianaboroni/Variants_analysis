@@ -47,6 +47,10 @@ technical_filters:
 | `driver_resources` | optional driver-gene and hotspot references |
 | `driver_scoring` | driver evidence thresholds |
 | `cosmic` | optional processed COSMIC resource; missing COSMIC is reported as missing evidence |
+| `tmb` | callable territory and burden/TMB thresholds |
+| `clonality` | purity/CN/multiplicity defaults and clonality cutoffs |
+| `ancestry` | optional AIMs panel and QC thresholds |
+| `ml` | optional reviewed-label model registry and objective |
 | `report` | report format, theme, and number of prioritized variants |
 
 ## Explicit Column Mapping
@@ -81,3 +85,49 @@ Each run writes:
 Use these files to reproduce a run, audit thresholds, and record the package
 version, commit, input checksum, warnings, runtime, and environment.
 
+## Auxiliary Module Defaults
+
+TMB requires an explicit callable territory to report mutations/Mb:
+
+```yaml
+tmb:
+  enabled: true
+  callable_mb: 30
+  require_callable_mb: true
+```
+
+If `callable_mb` is missing, the run writes countable burden but marks TMB as
+not evaluable.
+
+Clonality uses purity/CN/multiplicity when available:
+
+```yaml
+clonality:
+  enabled: true
+  clonal_ccf_cutoff: 0.85
+  subclonal_ccf_cutoff: 0.55
+```
+
+Without purity, the module writes VAF-proxy labels and records that limitation.
+
+Ancestry requires a user-provided AIMs panel:
+
+```yaml
+ancestry:
+  enabled: true
+  marker_panel:
+    path: data/aims_panel.tsv
+    version: aims_v1
+```
+
+ML requires an activated model in the reviewed-evidence registry:
+
+```yaml
+ml:
+  enabled: true
+  db_dir: db/variant_evidence
+  objective: P_TRUE_VARIANT
+  use_for_filtering: false
+```
+
+ML predictions are auxiliary review evidence only.

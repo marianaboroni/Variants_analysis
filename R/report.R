@@ -59,6 +59,10 @@ render_fallback_report <- function(run_dir, out_html) {
                        error = function(e) list())
   audit <- read_tbl("filter_audit.tsv.gz")
   retained <- read_tbl("variants_retained.tsv.gz")
+  module_status <- read_tbl("module_status.tsv")
+  tmb_summary <- read_tbl("tmb_summary.tsv")
+  clonality_summary <- read_tbl("clonality_summary.tsv")
+  ml_status <- read_tbl("ml_status.tsv")
   esc <- function(s) gsub("<", "&lt;", gsub("&", "&amp;", as.character(s)))
   tbl_html <- function(df, max = 200) {
     if (is.null(df) || nrow(df) == 0) return("<p><em>none</em></p>")
@@ -82,6 +86,12 @@ render_fallback_report <- function(run_dir, out_html) {
             esc(manifest$n_input_variants %||% "?"), esc(manifest$cosmic_release %||% "NA"),
             esc(manifest$n_cosmic_matches %||% "?")),
     "<h2>Filtering funnel / audit</h2>", tbl_html(audit),
+    "<h2>Auxiliary modules</h2>",
+    "<p>TMB/burden, clonality, ancestry, and ML add evidence and summaries only; they do not alter final classes or filtering decisions.</p>",
+    tbl_html(module_status),
+    "<h3>TMB / countable burden</h3>", tbl_html(tmb_summary),
+    "<h3>Clonality</h3>", tbl_html(clonality_summary),
+    "<h3>ML</h3>", tbl_html(ml_status),
     "<h2>Retained variants</h2>",
     if (is.null(retained) || nrow(retained) == 0) "<p>No retained variants.</p>"
     else tbl_html(if (length(show_cols)) retained[, show_cols, drop = FALSE] else retained),

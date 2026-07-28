@@ -160,3 +160,113 @@ ml_explain_prediction <- function(model, feature_row) {
   top <- head(names(contrib)[ord], 4)
   sprintf("Driven by: %s", paste(sprintf("%s(%+.2f)", top, contrib[top]), collapse = ", "))
 }
+
+#' Apply an activated ML model as an auxiliary prioritization layer.
+#'
+#' ML predictions never alter `filter_status`, `final_class`, or scientific
+#' scores. They are written as review/prioritization evidence only.
+#'
+#' @param variants Classified tumoronly variant table.
+#' @param cfg Resolved tumoronly configuration.
+#' @return A list with updated `variants` and one-row `status` table.
+#' @export
+apply_ml_predictions <- function(variants, cfg = NULL) {
+  if (!is.data.frame(variants)) stop("apply_ml_predictions(): `variants` must be a data.frame.", call. = FALSE)
+  enabled <- isTRUE(cfg_get(cfg, c("ml", "enabled"),
+                            cfg_get(cfg, c("ml_filter", "enabled"), TRUE)))
+  objective <- cfg_get(cfg, c("ml", "objective"), "P_TRUE_VARIANT")
+  db_dir <- cfg_get(cfg, c("ml", "db_dir"), "db/variant_evidence")
+  status <- ml_status_row(enabled = enabled, objective = objective, db_dir = db_dir)
+  variants <- add_empty_ml_columns(variants, status$status)
+  if (!enabled) {
+    return(list(variants = variants, status = status))
+  }
+
+  active <- file.path(db_dir, "model_registry", "ACTIVE")
+  if (!file.exists(active)) {
+    status$status <- "not_evaluable_no_active_model"
+    status$message <- "No activated ML model was found; use import-reviews, build-training-set, train-model, and activate-model first."
+    variants$ml_status <- status$status
+    return(list(variants = variants, status = status))
+  }
+
+  model_id <- readLines(active, warn = FALSE)[1]
+  model_path <- file.path(db_dir, "model_registry", paste0(model_id, ".rds"))
+  if (!file.exists(model_path)) {
+    status$status <- "not_evaluable_active_model_missing"
+    status$model_id <- model_id
+    status$message <- "ACTIVE points to a model file that does not exist."
+    variants$ml_status <- status$status
+    return(list(variants = variants, status = status))
+  }
+
+  model <- tryCatch(readRDS(model_path), error = function(e) e)
+  if (inherits(model, "error")) {
+    status$status <- "not_evaluable_model_read_error"
+    status$model_id <- model_id
+    status$message <- conditionMessage(model)
+    variants$ml_status <- status$status
+    return(list(variants = variants, status = status))
+  }
+
+  feats <- intersect(model$features %||% character(), names(variants))
+  missing_feats <- setdiff(model$features %||% character(), names(variants))
+  if (length(feats) == 0) {
+    status$status <- "not_evaluable_no_model_features"
+    status$model_id <- model_id
+    status$message <- "None of the active model features were present in the run table."
+    variants$ml_status <- status$status
+    return(list(variants = variants, status = status))
+  }
+
+  m <- variants[, feats, drop = FALSE]
+  for (f in names(m)) m[[f]] <- suppressWarnings(as.numeric(m[[f]]))
+  m[is.na(m)] <- 0
+  p <- tryCatch(suppressWarnings(as.numeric(stats::predict(model$model, newdata = as.data.frame(m), type = "response"))),
+                error = function(e) rep(NA_real_, nrow(variants)))
+
+  variants$ml_status <- "evaluated"
+  variants$ml_objective <- model$objective %||% objective
+  variants$ml_model_id <- model_id
+  variants$ml_true_positive_probability <- p
+  variants$ml_true_variant_probability <- p
+  variants$ml_prediction_explanation <- vapply(seq_len(nrow(variants)), function(i) {
+    ml_explain_prediction(model, m[i, , drop = FALSE])
+  }, character(1))
+
+  status$status <- "evaluated"
+  status$model_id <- model_id
+  status$n_variants_scored <- sum(!is.na(p))
+  status$n_features_used <- length(feats)
+  status$missing_model_features <- paste(missing_feats, collapse = ";")
+  status$message <- "ML predictions were written as auxiliary prioritization evidence only; filtering and final classes were not changed."
+  list(variants = variants, status = status)
+}
+
+add_empty_ml_columns <- function(variants, status = "not_evaluable") {
+  variants$ml_status <- status
+  variants$ml_objective <- NA_character_
+  variants$ml_model_id <- NA_character_
+  variants$ml_true_positive_probability <- NA_real_
+  variants$ml_true_variant_probability <- NA_real_
+  variants$ml_prediction_explanation <- NA_character_
+  variants
+}
+
+ml_status_row <- function(enabled, objective, db_dir) {
+  data.frame(
+    module = "ml",
+    enabled = isTRUE(enabled),
+    status = if (isTRUE(enabled)) "not_evaluable_no_active_model" else "disabled",
+    objective = objective,
+    db_dir = db_dir,
+    model_id = NA_character_,
+    n_variants_scored = 0L,
+    n_features_used = 0L,
+    missing_model_features = NA_character_,
+    message = if (isTRUE(enabled))
+      "No activated ML model was found; predictions were not generated."
+      else "ML module disabled.",
+    stringsAsFactors = FALSE
+  )
+}

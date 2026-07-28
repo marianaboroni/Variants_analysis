@@ -111,7 +111,8 @@ active_learning:
   min_samples_for_recurrence: 20
 
 tmb:
-  callable_mb: 30
+  callable_mb: null
+  require_callable_mb: true
   use_ml_filter: false
   ml_true_positive_cutoff: 0.60
   intermediate_threshold: 5

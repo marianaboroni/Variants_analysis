@@ -16,6 +16,11 @@
   guide, and tutorial entry points around the v2 workflow only.
 - Added `config/demo_v2.yml` and installed example data under `inst/extdata` for
   reproducible source-checkout and installed-package tutorials.
+- Added functional auxiliary modules for TMB/countable burden, clonality,
+  ancestry status/output integration, and activated-model ML prediction.
+- Added `tables/module_status.tsv`, `tables/tmb_summary.tsv`,
+  `tables/clonality_summary.tsv`, and `tables/ml_status.tsv` to the v2 run
+  contract.
 
 This branch is not yet declared version 2.0 complete. Installation, CI,
 documentation, clean-environment validation, and the full publication figure set

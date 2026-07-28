@@ -23,6 +23,8 @@ retained <- rd("variants_retained.tsv.gz"); excluded <- rd("variants_excluded.ts
 top <- rd("top_prioritized_variants.tsv"); inv <- rd("predictor_inventory.tsv")
 conf <- rd("predictor_conflicts.tsv"); ctx <- rd("cosmic_context_matches.tsv")
 schema <- rd("input_schema_report.tsv"); oncokb <- rd("oncokb_annotations.tsv.gz")
+module_status <- rd("module_status.tsv"); tmb_summary <- rd("tmb_summary.tsv")
+clonality_summary <- rd("clonality_summary.tsv"); ml_status <- rd("ml_status.tsv")
 plotman <- tryCatch(as.data.frame(data.table::fread(file.path(run_dir, "plots", "plot_manifest.tsv"))),
                     error = function(e) NULL)
 has_dt <- requireNamespace("DT", quietly = TRUE)
@@ -137,6 +139,47 @@ if (!is.null(top) && nrow(top) > 0) {
 
 ```{r}
 if (!is.null(schema)) { if (has_dt) DT::datatable(schema, rownames = FALSE, options = list(pageLength = 10, scrollX = TRUE)) else knitr::kable(schema) }
+```
+
+## Auxiliary modules
+
+*What this shows:* TMB/burden, clonality, ancestry, and ML are auxiliary modules.
+They add evidence and summaries but do not alter `filter_status`, `final_class`,
+or the core tumor-only scores. If a module is not evaluable, the status table
+explains why.
+
+```{r}
+if (!is.null(module_status)) {
+  if (has_dt) DT::datatable(module_status, rownames = FALSE, options = list(pageLength = 10, scrollX = TRUE))
+  else knitr::kable(module_status)
+} else "No auxiliary module status table was written."
+```
+
+### TMB / countable burden
+
+```{r}
+if (!is.null(tmb_summary)) {
+  if (has_dt) DT::datatable(tmb_summary, rownames = FALSE, options = list(pageLength = 10, scrollX = TRUE))
+  else knitr::kable(tmb_summary)
+} else "No TMB/burden summary was written."
+```
+
+### Clonality
+
+```{r}
+if (!is.null(clonality_summary)) {
+  if (has_dt) DT::datatable(clonality_summary, rownames = FALSE, options = list(pageLength = 10, scrollX = TRUE))
+  else knitr::kable(clonality_summary)
+} else "No clonality summary was written."
+```
+
+### ML
+
+```{r}
+if (!is.null(ml_status)) {
+  if (has_dt) DT::datatable(ml_status, rownames = FALSE, options = list(pageLength = 10, scrollX = TRUE))
+  else knitr::kable(ml_status)
+} else "No ML status table was written."
 ```
 
 ## Filtering funnel

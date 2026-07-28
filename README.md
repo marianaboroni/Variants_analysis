@@ -12,6 +12,11 @@ Tumor-only results are probabilistic. The package never treats a variant as
 clinically confirmed somatic or germline without matched-normal or orthogonal
 validation.
 
+The v2 workflow also includes functional auxiliary modules for exploratory
+TMB/countable burden, clonality, genetic ancestry, and ML-assisted review. These
+modules add tables, status messages, and evidence columns; they do not silently
+change the core filtering or final classification.
+
 ## Current v2 Scope
 
 The v2 user workflow is:
@@ -173,6 +178,11 @@ results/<run_id>/
     known_drivers.tsv
     sample_summary.tsv
     filter_audit.tsv
+    module_status.tsv
+    tmb_summary.tsv
+    clonality_summary.tsv
+    ml_status.tsv
+    ancestry_summary.tsv        # when ancestry is enabled
   figures/
     figure_01_filtering_workflow.pdf/.svg/.png
     figure_02_qc_overview.pdf/.svg/.png
@@ -196,6 +206,9 @@ For each classified variant, start with:
 | `final_class` | conservative tumor-only classification candidate |
 | `filter_status` | `PASS`, `REVIEW`, or `FAIL` |
 | `somatic_score` | bounded support score for somatic-candidate behavior |
+| `tmb_countable` | whether the row contributes to exploratory TMB/burden |
+| `clonality_class` | CCF or VAF-proxy clonality label, with method recorded |
+| `ml_status` | ML prediction status for the row |
 | `evidence_supporting_classification` | evidence favoring the assigned class |
 | `evidence_against_classification` | evidence arguing against the assigned class |
 | `missing_evidence` | evidence unavailable for interpretation |
@@ -204,6 +217,18 @@ For each classified variant, start with:
 Main classes are `high_confidence_somatic`, `probable_somatic`,
 `likely_germline`, `likely_artifact`, `technical_fail`,
 `manual_review_required`, and `uncertain_tumor_only`.
+
+Auxiliary modules are summarized in `tables/module_status.tsv`:
+
+- TMB is reported as mutations/Mb only when `tmb.callable_mb` is configured.
+  Without that denominator, the module reports countable burden but marks TMB as
+  not evaluable.
+- Clonality uses purity/CN/multiplicity when present. Without purity, VAF-proxy
+  classes are labelled as such.
+- Ancestry requires a user-supplied AIMs panel and is experimental,
+  non-diagnostic, and never used to identify race or ethnicity.
+- ML requires human-reviewed labels and an explicitly activated model. ML
+  predictions are auxiliary review evidence only.
 
 ## Real-Data Validation Gate
 
@@ -225,8 +250,8 @@ cohort recurrence behavior.
 ## What v2 Does Not Claim
 
 - It does not confirm clinical somatic or germline status.
-- It does not reintroduce archived TMB, clonality, ancestry, or ML workflows as
-  v2 core features.
+- It does not let TMB, clonality, ancestry, or ML override validated filtering
+  and classification rules.
 - It does not use absence from external databases as proof that a variant is
   somatic.
 - It does not treat generated files alone as validation; commands and contents

@@ -71,11 +71,18 @@ Start with:
 - `tables/classified_variants.tsv`
 - `tables/sample_summary.tsv`
 - `tables/filter_audit.tsv`
+- `tables/module_status.tsv`
+- `tables/tmb_summary.tsv`
+- `tables/clonality_summary.tsv`
+- `tables/ml_status.tsv`
 
 For each variant, inspect:
 
 - `final_class`
 - `somatic_score`
+- `tmb_countable`
+- `clonality_class`
+- `ml_status`
 - `filter_status`
 - `evidence_supporting_classification`
 - `evidence_against_classification`
@@ -84,4 +91,3 @@ For each variant, inspect:
 
 Continue with [TUTORIAL.md](TUTORIAL.md) for a full walkthrough, including an
 installed-package example.
-

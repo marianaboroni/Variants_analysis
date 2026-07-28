@@ -50,8 +50,11 @@ change:
 - caller `FILTER` evidence is graded/configurable and must not become a
   hidden binary veto for all non-`PASS` values;
 - cohort recurrence is not evaluable below configured cohort/sample floors;
-- no TMB module is reintroduced;
-- archived TMB/out-of-scope modules stay archived.
+- TMB, clonality, ancestry, and ML are functional auxiliary modules, but they
+  must not silently alter `final_class`, `filter_status`, or the audited core
+  scores;
+- TMB requires a valid callable territory before mutations/Mb are interpreted;
+- ML requires reviewed labels and explicit model activation.
 
 ## User workflow
 
@@ -336,7 +339,12 @@ results/
 │   ├── likely_artifact.tsv
 │   ├── known_drivers.tsv
 │   ├── sample_summary.tsv
-│   └── filter_audit.tsv
+│   ├── filter_audit.tsv
+│   ├── module_status.tsv
+│   ├── tmb_summary.tsv
+│   ├── clonality_summary.tsv
+│   ├── ml_status.tsv
+│   └── ancestry_summary.tsv
 ├── figures/
 ├── figure_data/
 ├── logs/

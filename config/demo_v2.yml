@@ -94,9 +94,40 @@ predictors:
   use_for_prioritization: true
   use_for_filtering: false
 
+ml:
+  enabled: true
+  db_dir: db/variant_evidence
+  objective: P_TRUE_VARIANT
+  use_for_filtering: false
+
 authenticity:
   likely_true_min: 0.66
   likely_artifact_max: 0.40
+
+tmb:
+  enabled: true
+  callable_mb: 30
+  require_callable_mb: true
+  include_final_classes:
+    - high_confidence_somatic
+    - probable_somatic
+  use_ml_filter: false
+  ml_true_positive_cutoff: 0.60
+  intermediate_threshold: 5
+  high_threshold: 10
+
+clonality:
+  enabled: true
+  default_total_cn: 2
+  default_multiplicity: 1
+  normal_cn: 2
+  clonal_ccf_cutoff: 0.85
+  subclonal_ccf_cutoff: 0.55
+  clonal_vaf_proxy_cutoff: 0.30
+  subclonal_vaf_proxy_cutoff: 0.12
+  min_variants_for_clustering: 10
+  max_clusters_per_sample: 3
+  seed: 20260621
 
 population:
   global:
@@ -115,10 +146,17 @@ population:
 
 ancestry:
   enabled: false
+  marker_panel:
+    path: null
+    version: null
+    genome_build: null
+  qc:
+    minimum_depth: 10
+    minimum_alt_reads: 3
+    minimum_snps: 100
 
 report:
   format:
     - html
   theme: publication
   top_variants: 30
-

@@ -33,6 +33,10 @@ Tumor-only classes are probabilistic candidates. They should not be reported as
 confirmed clinical somatic or germline calls without matched-normal or
 orthogonal validation.
 
+TMB/burden, clonality, ancestry, and ML-assisted review are functional
+auxiliary modules. They add evidence and status tables but do not alter the
+core classification.
+
 # Source-checkout run
 
 From the repository root:
@@ -101,6 +105,10 @@ logs/warnings.tsv
 tables/classified_variants.tsv
 tables/sample_summary.tsv
 tables/filter_audit.tsv
+tables/module_status.tsv
+tables/tmb_summary.tsv
+tables/clonality_summary.tsv
+tables/ml_status.tsv
 tables/high_confidence_somatic.tsv
 tables/likely_germline.tsv
 tables/likely_artifact.tsv
@@ -116,11 +124,13 @@ The key per-variant evidence columns are:
 - `evidence_supporting_classification`;
 - `evidence_against_classification`;
 - `missing_evidence`;
-- `classification_explanation`.
+- `classification_explanation`;
+- `tmb_countable`;
+- `clonality_class`;
+- `ml_status`.
 
 # Real-data gate
 
 The demo is not the validation gate. The v2 workflow was run on
 `data/test/WGS_all_patients_first100k.tsv`; details are recorded in
 `docs/REAL_DATA_VALIDATION.md`.
-

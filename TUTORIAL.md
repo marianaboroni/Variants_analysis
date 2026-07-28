@@ -29,6 +29,16 @@ be somatic, germline-like, recurrent technical noise, or simply under-supported.
 
 Do not rewrite these classes as confirmed clinical calls.
 
+The v2 run also executes auxiliary modules:
+
+- TMB/countable burden;
+- clonality;
+- genetic ancestry, when an AIMs panel is configured;
+- ML-assisted review, when a reviewed-label registry and activated model exist.
+
+These modules are functional but additive. They do not change the audited final
+classification.
+
 ## 2. Source-Checkout Tutorial
 
 From the repository root:
@@ -152,8 +162,11 @@ The run performs these steps:
 7. Calculate technical, germline, artifact, and somatic evidence scores.
 8. Apply the audited classifier once.
 9. Add driver and hotspot evidence when resources are configured.
-10. Write evidence strings explaining every classification.
-11. Generate tables, figures, logs, config snapshots, manifests, and report.
+10. Run auxiliary modules for ML status/predictions, TMB or countable burden,
+    and clonality.
+11. Run genetic ancestry if enabled and an AIMs panel is configured.
+12. Write evidence strings explaining every classification.
+13. Generate tables, figures, logs, config snapshots, manifests, and report.
 
 ## 6. Output Tour
 
@@ -166,6 +179,10 @@ results/<run_id>/logs/warnings.tsv
 results/<run_id>/tables/classified_variants.tsv
 results/<run_id>/tables/sample_summary.tsv
 results/<run_id>/tables/filter_audit.tsv
+results/<run_id>/tables/module_status.tsv
+results/<run_id>/tables/tmb_summary.tsv
+results/<run_id>/tables/clonality_summary.tsv
+results/<run_id>/tables/ml_status.tsv
 ```
 
 Then inspect per-class tables:
@@ -182,12 +199,46 @@ Each row in `classified_variants.tsv` carries:
 - `evidence_supporting_classification`;
 - `evidence_against_classification`;
 - `missing_evidence`;
-- `classification_explanation`.
+- `classification_explanation`;
+- `tmb_countable`;
+- `clonality_class`;
+- `clonality_method`;
+- `ml_status`.
 
 These columns are the audit trail. If a row has missing COSMIC, TLOD, mapping
 quality, or cohort evidence, that limitation remains visible.
 
-## 7. Figures
+## 7. Auxiliary Modules
+
+`tables/module_status.tsv` is the control panel for auxiliary modules.
+
+TMB/burden:
+
+- If `tmb.callable_mb` is valid, `tmb_summary.tsv` reports
+  `tmb_mut_per_mb`.
+- If `tmb.callable_mb` is missing, the module still reports countable burden but
+  marks TMB as `not_evaluable_missing_callable_mb`.
+
+Clonality:
+
+- If purity is available, the module reports CCF-based labels.
+- If purity is missing, the module reports explicit VAF-proxy labels such as
+  `clonal_like_high_vaf`; these are not CCF estimates.
+
+Ancestry:
+
+- Requires `ancestry.enabled: true` and a user-provided AIMs panel.
+- It is experimental, non-diagnostic, and not race or ethnicity.
+- It never filters variants.
+
+ML:
+
+- Requires reviewed labels, a built training set, a trained candidate model, and
+  explicit activation.
+- If no active model is available, `ml_status.tsv` says so and the run continues.
+- Predictions are auxiliary review evidence only.
+
+## 8. Figures
 
 The current v2 figure set writes PDF, SVG, PNG, and source data:
 
@@ -204,7 +255,7 @@ figure_data/figure_01_filtering_workflow.tsv
 
 The TSV files in `figure_data/` are the reproducible source for custom plotting.
 
-## 8. Real-Data Gate
+## 9. Real-Data Gate
 
 The demo is not the validation gate. The v2 implementation was first tested on
 `data/test/WGS_all_patients_first100k.tsv`. See
@@ -215,7 +266,7 @@ The real-data gate passed for ingestion and full workflow execution. It remains
 limited because the 100k-row slice contains one active sample, so real
 multi-sample recurrence behavior still requires an additional real cohort.
 
-## 9. Common Problems
+## 10. Common Problems
 
 - `E_INPUT_MISSING`: pass `--input` or set `input.path`.
 - `E_GENOME_BUILD`: set `input.genome_build` to `GRCh37` or `GRCh38`.
@@ -226,4 +277,8 @@ multi-sample recurrence behavior still requires an additional real cohort.
   runs.
 - `W_COSMIC_NOT_CONFIGURED`: COSMIC evidence was not available; classification
   still runs, but this evidence is marked missing.
-
+- `W_TMB_CALLABLE_MB_MISSING`: TMB denominator is missing; read burden counts
+  but do not interpret mutations/Mb.
+- `W_CLONALITY_VAF_PROXY_ONLY`: clonality used VAF-proxy classes because purity
+  was unavailable.
+- `W_ML_NO_ACTIVE_MODEL`: ML is enabled but no activated model was found.

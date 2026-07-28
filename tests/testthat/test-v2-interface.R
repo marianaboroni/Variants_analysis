@@ -147,6 +147,10 @@ test_that("run_tumoronly writes the v2 output contract", {
     file.path("tables", "known_drivers.tsv"),
     file.path("tables", "sample_summary.tsv"),
     file.path("tables", "filter_audit.tsv"),
+    file.path("tables", "module_status.tsv"),
+    file.path("tables", "ml_status.tsv"),
+    file.path("tables", "tmb_summary.tsv"),
+    file.path("tables", "clonality_summary.tsv"),
     file.path("figures", "figure_manifest.tsv"),
     file.path("figure_data", "figure_01_filtering_workflow.tsv"),
     file.path("logs", "warnings.tsv")
@@ -157,8 +161,14 @@ test_that("run_tumoronly writes the v2 output contract", {
   expect_true(all(c("evidence_supporting_classification",
                     "evidence_against_classification",
                     "missing_evidence",
-                    "classification_explanation") %in% names(classified)))
+                    "classification_explanation",
+                    "tmb_countable",
+                    "clonality_class",
+                    "ml_status") %in% names(classified)))
   expect_equal(nrow(classified), nrow(res$variants))
+
+  modules <- read_variants(file.path(res$run_dir, "tables", "module_status.tsv"), "\t")
+  expect_true(all(c("ml", "tmb", "clonality", "ancestry") %in% modules$module))
 
   manifest <- jsonlite::read_json(file.path(res$run_dir, "run_manifest.json"),
                                   simplifyVector = TRUE)

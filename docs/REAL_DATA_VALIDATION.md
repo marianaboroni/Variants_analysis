@@ -456,6 +456,74 @@ This Phase 4 rerun does not make v2 complete. It validates the new output
 contract on the real file while preserving the same scientific classification
 counts.
 
+## Auxiliary-module rerun
+
+After TMB/burden, clonality, ancestry-status, and ML-status were implemented as
+functional v2 auxiliary modules, the same real input was executed again:
+
+```bash
+/usr/bin/time -l Rscript exec/tumoronly run \
+  --input data/test/WGS_all_patients_first100k.tsv \
+  --config config/wgs_all_patients_subset_config.yml \
+  --output results/wgs_all_patients_subset_filter \
+  --run-id real_data_modules_v2_callable_gate
+```
+
+The rerun completed, rendered `report.html`, wrote `run_manifest.json`, and
+generated the auxiliary module tables:
+
+- `tables/module_status.tsv`
+- `tables/ml_status.tsv`
+- `tables/tmb_summary.tsv`
+- `tables/clonality_summary.tsv`
+- `tables/ancestry_summary.tsv`
+
+The core classification and filter counts were unchanged from the previously
+validated run:
+
+| Metric | Count |
+|---|---:|
+| Input rows | 100,000 |
+| `PASS` | 51,531 |
+| `REVIEW` | 4,996 |
+| `FAIL` | 43,473 |
+| `probable_somatic` | 51,879 |
+| `likely_artifact` | 18,375 |
+| `technical_fail` | 12,925 |
+| `likely_germline` | 12,173 |
+| `uncertain_tumor_only` | 4,100 |
+| `manual_review_required` | 548 |
+
+Runtime and memory for the auxiliary-module rerun:
+
+| Metric | Value |
+|---|---:|
+| Manifest runtime | 744.62 seconds |
+| Wall time from `/usr/bin/time -l` | 762.28 seconds |
+| Maximum resident set size | 853,487,616 bytes |
+| macOS peak memory footprint | 3,082,560,448 bytes |
+
+Module statuses on the real file:
+
+| Module | Status | Result |
+|---|---|---|
+| ML | `not_evaluable_no_active_model` | no activated model was available, so prediction columns were created but probabilities were `NA` |
+| TMB/burden | `not_evaluable_missing_callable_mb` | 106 countable coding candidates; no mutations/Mb value was reported because no validated callable territory denominator was configured |
+| Clonality | `evaluated` | 51,879 somatic-candidate rows received VAF-proxy clonality labels because purity was absent |
+| Ancestry | `not_evaluable` | no AIMs reference panel was configured, so ancestry was reported as not evaluable rather than inferred |
+
+The auxiliary modules add evidence, status, summaries, and warnings. They did not
+change `final_class`, `filter_status`, the fail-safe rules, or `somatic_score`.
+
+Additional warning codes in the auxiliary-module rerun:
+
+| Code | Affected variants | Interpretation |
+|---|---:|---|
+| `W_TMB_CALLABLE_MB_MISSING` | 100,000 | TMB in mutations/Mb was not reported because `tmb.callable_mb` was missing |
+| `W_CLONALITY_VAF_PROXY_ONLY` | 51,879 | clonality used VAF-proxy labels because purity was unavailable |
+| `W_ML_NO_ACTIVE_MODEL` | 100,000 | no activated ML model was available for prediction |
+| `W_ANCESTRY_PANEL_MISSING` | 100,000 | ancestry inference was enabled but no AIMs reference panel was configured |
+
 ## Test evidence
 
 Targeted tests:
@@ -488,6 +556,9 @@ the real-data run.
   current pipeline.
 - COSMIC and driver resources are not configured; therefore driver detection and
   COSMIC contextual evidence were not validated in this run.
+- TMB in mutations/Mb was not evaluable because no validated callable territory
+  denominator was configured; only countable burden was reported.
+- Clonality used VAF-proxy labels because tumor purity was absent.
 - Ancestry inference is not evaluable without an AIMs reference panel.
 - The legacy maftools figures remain useful as smoke-test outputs. The new v2
   figures are clearer and data-backed, but the full publication figure set

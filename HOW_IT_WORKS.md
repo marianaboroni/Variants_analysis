@@ -73,7 +73,52 @@ confirmation.
   `manual_review_required`, `uncertain_tumor_only`.
 - Interpretation: these are research classifications, not clinical truth.
 
-## 8. Evidence trail
+## 8. Auxiliary modules
+
+TMB/countable burden:
+
+- Objective: summarize per-sample countable somatic-candidate burden and TMB
+  when a callable territory is configured.
+- Input: final class, consequence, sample ID, tumor type, `tmb.callable_mb`.
+- Operation: count eligible somatic-candidate coding/splice consequences.
+- Output: `tables/tmb_summary.tsv` and `tmb_countable`.
+- Limitation: without `callable_mb`, TMB is not evaluable and only burden counts
+  are reported.
+
+Clonality:
+
+- Objective: classify somatic candidates as clonal/intermediate/subclonal when
+  evidence supports it.
+- Input: VAF, purity, copy number, mutation multiplicity.
+- Operation: estimate CCF when possible; otherwise use explicit VAF-proxy
+  labels.
+- Output: `tables/clonality_summary.tsv`, `ccf_estimate`,
+  `clonality_class`, `clonality_method`.
+- Limitation: VAF-proxy classes are not CCF estimates.
+
+Genetic ancestry:
+
+- Objective: estimate broad genetic-ancestry proportions for population
+  frequency interpretation when a user supplies an AIMs panel.
+- Input: common SNP-like loci, VAF, depth, AIMs panel.
+- Operation: select germline-informative SNPs, exclude unstable loci, and
+  estimate continuous proportions.
+- Output: `ancestry_summary.tsv`, `ancestry_qc.tsv`, `ancestry_snps.tsv.gz`,
+  and ancestry plots when enabled.
+- Limitation: experimental, non-diagnostic, not race or ethnicity, and never a
+  filter.
+
+ML-assisted review:
+
+- Objective: add review-prioritization probabilities from human-reviewed labels.
+- Input: an activated model in `ml.db_dir`.
+- Operation: apply the active model to run features.
+- Output: `ml_status.tsv`, `ml_true_positive_probability`,
+  `ml_prediction_explanation`.
+- Limitation: predictions never alter filters, final classes, or scientific
+  scores.
+
+## 9. Evidence trail
 
 - Objective: make every classification auditable.
 - Input: computed evidence columns and final class.
@@ -83,13 +128,11 @@ confirmation.
   `evidence_against_classification`, `missing_evidence`,
   `classification_explanation`.
 
-## 9. Outputs and report
+## 10. Outputs and report
 
 - Objective: make the run reproducible and interpretable.
 - Output: tables, figures, figure data, manifests, config, session info, and
   HTML report.
-- Limitation: the current v2 figure set covers QC and classification; additional
-  publication figures are still planned.
-
-Archived TMB, clonality, ancestry, dashboard, and ML workflows are not part of
-the v2 core workflow.
+- Limitation: the current v2 figure set covers QC, classification, and module
+  status through tables/report; additional publication figures are still
+  planned.

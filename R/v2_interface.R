@@ -86,7 +86,36 @@ tumoronly_default_config <- function() {
       use_for_prioritization = TRUE,
       use_for_filtering = FALSE
     ),
+    ml = list(
+      enabled = TRUE,
+      db_dir = "db/variant_evidence",
+      objective = "P_TRUE_VARIANT",
+      use_for_filtering = FALSE
+    ),
     authenticity = list(likely_true_min = 0.66, likely_artifact_max = 0.40),
+    tmb = list(
+      enabled = TRUE,
+      callable_mb = NULL,
+      require_callable_mb = TRUE,
+      include_final_classes = c("high_confidence_somatic", "probable_somatic"),
+      use_ml_filter = FALSE,
+      ml_true_positive_cutoff = 0.60,
+      intermediate_threshold = 5,
+      high_threshold = 10
+    ),
+    clonality = list(
+      enabled = TRUE,
+      default_total_cn = 2,
+      default_multiplicity = 1,
+      normal_cn = 2,
+      clonal_ccf_cutoff = 0.85,
+      subclonal_ccf_cutoff = 0.55,
+      clonal_vaf_proxy_cutoff = 0.30,
+      subclonal_vaf_proxy_cutoff = 0.12,
+      min_variants_for_clustering = 10,
+      max_clusters_per_sample = 3,
+      seed = 20260621
+    ),
     population = list(
       global = list(common_af = 0.01, rare_af = 0.001),
       brazilian = list(
@@ -99,7 +128,13 @@ tumoronly_default_config <- function() {
       local_controls = list(path = NULL, artifact_or_germline_af = 0.005,
                             minimum_observations = 2)
     ),
-    ancestry = list(enabled = FALSE),
+    ancestry = list(
+      enabled = FALSE,
+      marker_panel = list(path = NULL, version = NULL, genome_build = NULL),
+      qc = list(minimum_depth = 10, minimum_alt_reads = 3, minimum_snps = 100),
+      dominant_component_threshold = 0.80,
+      admixed_minimum_secondary_component = 0.15
+    ),
     plots = list(
       minimum_samples_for_oncoplot = 2,
       minimum_samples_for_interactions = 20,

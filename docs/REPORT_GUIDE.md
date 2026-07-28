@@ -19,6 +19,7 @@ The current report summarizes:
 - quality-control metrics;
 - filtering workflow;
 - classification counts;
+- auxiliary module status for TMB/burden, clonality, ancestry, and ML;
 - prioritized variants;
 - per-variant evidence columns;
 - limitations and reproducibility metadata.
@@ -42,6 +43,11 @@ The report should be interpreted with:
 - `tables/classified_variants.tsv`
 - `tables/filter_audit.tsv`
 - `tables/sample_summary.tsv`
+- `tables/module_status.tsv`
+- `tables/tmb_summary.tsv`
+- `tables/clonality_summary.tsv`
+- `tables/ml_status.tsv`
+- `tables/ancestry_summary.tsv`, when ancestry is enabled
 - `logs/warnings.tsv`
 - `run_manifest.json`
 - `config_used.yaml`

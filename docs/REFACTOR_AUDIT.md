@@ -73,9 +73,9 @@ split by domain.
 | `driver_classification.R` | hotspot/driver-gene annotation, `driver_class` | reads final_class; sets `hotspot_match` used by scoring | **keep** (core, trim) |
 | `guideline_classification.R` | somatic oncogenicity + germline ACMG points → `somatic_oncogenicity_class`, `germline_disposition` | **yes — consumed by classify_variants** | **keep** (core, fix OncoKB) |
 | `confidence_ranking.R` | confidence scores/tiers/bucket/rank | additive; **consumes ML prob** | **replace** with ML-free confidence |
-| `ml_filtering.R` (663 LOC) | semi-supervised GLM, pseudo-labels, active learning | additive — never writes `final_class` | **remove/archive** (unvalidated ML) |
-| `ancestry.R` (676 LOC) | SNP-based PCA ancestry assignment | additive analysis | **remove/archive** (out of scope) |
-| `clonality.R` | CCF / clonal-subclonal / kmeans clusters | additive analysis | **remove/archive** (out of scope) |
+| `ml_filtering.R` (663 LOC) | semi-supervised GLM, pseudo-labels, active learning | additive — never writes `final_class` | **superseded** by reviewed-label registry + activated-model v2 ML prediction |
+| `ancestry.R` (676 LOC) | SNP-based PCA ancestry assignment | additive analysis | **superseded** by `R/ancestry_infer.R` + `R/ancestry_plots.R` |
+| `clonality.R` | CCF / clonal-subclonal / kmeans clusters | additive analysis | **restored** as v2 auxiliary module with explicit CCF/VAF-proxy status |
 | `tmb.R` | per-sample TMB | additive summary | **keep** (internal, cheap, report-useful) |
 | `qc_metrics.R` | per-sample QC counts | additive summary | **keep** (internal) |
 | `reporting.R` | ~25 TSV writers + markdown filter report | output | **rewrite** to standardized run dir |
@@ -84,7 +84,7 @@ split by domain.
 
 ### Confirmed facts (verified by reading the code)
 - **`final_class` is written in exactly one place:** `classify_variants()` (scoring.R:125). Every other module only reads it. Good — one decision point.
-- **`ml_filtering.R` and `confidence_ranking.R` never mutate `final_class`.** ML is purely additive; safe to remove.
+- **`ml_filtering.R` and `confidence_ranking.R` never mutate `final_class`.** ML is purely additive; the v2 ML path keeps this invariant.
 - **`visualization.R` already produces `somatic_maftools_input.maf` and already calls `maftools::read.maf()` + `maftools::oncoplot()`** (visualization.R:177,186), guarded by `requireNamespace`, with a ggplot2 fallback. The maftools path is the one to keep.
 
 ## 4. Dependencies
@@ -164,8 +164,10 @@ traceable) and is retained; OncoKB participation is **removed**.
   canonical key, manifest, provenance (`cosmic.R`); OncoKB → separate step
   (`oncokb.R`); outputs → standardized run dir (`maf_reporting.R` + report);
   confidence → ML-free.
-- **Remove/archive:** `ml_filtering.R`, `ancestry.R`, `clonality.R`,
-  `dashboard.R`, one duplicate runner, the ggplot2 fallback oncoplot.
+- **Supersede/replace:** old `ml_filtering.R`, `ancestry.R`, and
+  `clonality.R` are replaced by v2 auxiliary modules that write explicit status
+  and never change the core classifier. `dashboard.R`, one duplicate runner, and
+  the ggplot2 fallback oncoplot remain out of the v2 core.
 
 ## 8. Regression safety
 

@@ -27,5 +27,10 @@ utils::globalVariables(c(
   "hom", "LEGACY_MUTATION_ID", "max_pop_af", "MUTATION_SOMATIC_STATUS",
   "N", "n_variants", "orig_alt", "orig_chrom", "orig_pos", "orig_ref",
   "POS", "PRIMARY_HISTOLOGY", "PRIMARY_SITE", "PUBMED_PMID", "REF", "rsid",
-  "tumor_histology", "tumor_site", "tumor_subtype", "value", "variant_type"
+  "tumor_histology", "tumor_site", "tumor_subtype", "value", "variant_type",
+  "burden_label", "ccf_estimate", "clonal_fraction", "clonality_class",
+  "clonality_method", "clonality_methods", "driver_class", "interpretation",
+  "limitation", "n_clonal", "n_clonality_evaluable", "n_subclonal",
+  "n_tmb_countable", "purity_used", "subclonal_fraction", "tmb_countable",
+  "tmb_mut_per_mb"
 ))

@@ -46,6 +46,36 @@ The missing evidence is propagated to per-variant explanations.
 COSMIC evidence is unavailable. This does not invalidate core filtering, but
 driver/context interpretation is limited.
 
+## `W_TMB_CALLABLE_MB_MISSING`
+
+The TMB/burden module ran, but `tmb.callable_mb` was missing or invalid. The
+output reports countable candidate burden only. Set:
+
+```yaml
+tmb:
+  callable_mb: 30
+```
+
+Use the true callable territory for your assay.
+
+## `W_CLONALITY_VAF_PROXY_ONLY`
+
+Purity was missing for at least one somatic candidate, so clonality labels were
+based on VAF proxy rather than CCF. Add tumor purity and, when available, local
+copy number and mutation multiplicity.
+
+## `W_ML_NO_ACTIVE_MODEL`
+
+ML is enabled, but no activated model exists in `ml.db_dir`. Import reviewed
+labels, build a training set, train a candidate model, and activate it
+explicitly before expecting predictions.
+
+## `W_ANCESTRY_PANEL_MISSING`
+
+Ancestry is enabled, but no AIMs marker panel was found at
+`ancestry.marker_panel.path`. Provide a versioned panel or disable ancestry for
+the run.
+
 ## Report did not render with R Markdown
 
 The pipeline falls back to a self-contained HTML report if `rmarkdown` or pandoc
@@ -55,4 +85,3 @@ is unavailable. Install `rmarkdown` and pandoc for the template renderer.
 
 Some R installations lack a working Cairo/X11 SVG device. The v2 figure writer
 uses a data-driven vector SVG fallback, so SVG files are still produced.
-

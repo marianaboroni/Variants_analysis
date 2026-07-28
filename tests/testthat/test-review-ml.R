@@ -67,4 +67,14 @@ test_that("ML scaffold: build training set, train candidate (not active), gated 
   expect_error(ml_activate_model(db, res$model_id, approve = FALSE), "approval", ignore.case = TRUE)
   suppressMessages(ml_activate_model(db, res$model_id, approve = TRUE))
   expect_true(file.exists(file.path(db, "model_registry", "ACTIVE")))
+
+  cfg <- tumoronly_default_config()
+  cfg$ml$db_dir <- db
+  va$final_class <- ifelse(y == "TRUE_POSITIVE", "probable_somatic", "likely_artifact")
+  va$filter_status <- ifelse(y == "TRUE_POSITIVE", "PASS", "FAIL")
+  pred <- apply_ml_predictions(va, cfg)
+  expect_equal(pred$status$status, "evaluated")
+  expect_true(any(!is.na(pred$variants$ml_true_positive_probability)))
+  expect_equal(pred$variants$final_class, va$final_class)
+  expect_equal(pred$variants$filter_status, va$filter_status)
 })

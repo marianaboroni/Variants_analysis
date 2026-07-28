@@ -41,12 +41,18 @@ read_variant_input()
   -> classify_variants()
   -> add_prioritization()
   -> add_variant_authenticity()
+  -> run_auxiliary_modules()
   -> add_tumoronly_evidence_columns()
   -> write tables, figures, manifests, report
 ```
 
 `add_tumoronly_evidence_columns()` is a v2 traceability layer. It does not
 change `final_class`, scores, thresholds, or filter decisions.
+
+`run_auxiliary_modules()` executes ML status/prediction, TMB/burden, and
+clonality. Ancestry is run separately when enabled because it requires a
+user-supplied AIMs panel. These modules write evidence/status outputs and do
+not change filtering or classification.
 
 ## Input Layer
 
@@ -76,6 +82,11 @@ tables/likely_artifact.tsv
 tables/known_drivers.tsv
 tables/sample_summary.tsv
 tables/filter_audit.tsv
+tables/module_status.tsv
+tables/ml_status.tsv
+tables/tmb_summary.tsv
+tables/clonality_summary.tsv
+tables/ancestry_summary.tsv
 figures/*.pdf|*.svg|*.png
 figure_data/*.tsv
 logs/warnings.tsv
@@ -92,8 +103,11 @@ run_manifest.json
 - Missing COSMIC, driver, TLOD, population-frequency, mapping-quality, or
   strand-bias evidence remains visible in logs and per-variant explanation
   columns.
-- Archived TMB, clonality, ancestry, dashboard, and ML workflows are not part of
-  the v2 core user workflow.
+- TMB requires a valid callable territory to report mutations/Mb.
+- Clonality records whether it used CCF or VAF-proxy evidence.
+- Genetic ancestry is experimental, non-diagnostic, and requires a user-provided
+  AIMs panel.
+- ML requires an explicitly activated model and never alters final classes.
 
 ## Real-Data Gate
 

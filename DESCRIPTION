@@ -10,7 +10,9 @@ Description: A reproducible pipeline for tumor-only variant filtering,
     variant files; validates the input schema and genome build; applies
     documented fail-safe tumor-only filters; scores technical, population,
     artifact, and somatic-candidate evidence; writes traceable per-variant
-    explanations; and generates tables, figures, manifests, and an HTML report.
+    explanations; runs auxiliary TMB/burden, clonality, ancestry, and
+    ML-assisted review modules; and generates tables, figures, manifests, and
+    an HTML report.
     Tumor-only classifications are probabilistic candidates and are not
     clinical confirmation without matched-normal or orthogonal validation.
 License: MIT + file LICENSE

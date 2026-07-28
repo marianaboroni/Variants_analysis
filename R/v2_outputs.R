@@ -215,6 +215,13 @@ v2_table_columns <- function(variants) {
     "gene_driver_match", "COSMIC_MATCH", "COSMIC_TOTAL_OCCURRENCES",
     "COSMIC_TUMOR_CONTEXT_STATUS", "PRIORITY", "PRIORITY_SCORE_BASE",
     "AUTHENTICITY", "VARIANT_AUTHENTICITY_SCORE",
+    "tmb_countable", "purity_used", "total_cn_used", "multiplicity_used",
+    "copy_number_available", "multiplicity_available", "ccf_estimate",
+    "ccf_capped", "clonality_class", "clonality_method",
+    "clonality_cluster_id", "clonality_cluster_center",
+    "clonality_cluster_label", "ml_status", "ml_objective", "ml_model_id",
+    "ml_true_positive_probability", "ml_true_variant_probability",
+    "ml_prediction_explanation",
     "evidence_supporting_classification", "evidence_against_classification",
     "missing_evidence", "classification_explanation", "filter_reasons",
     "recommended_action"
@@ -285,6 +292,32 @@ build_v2_warning_table <- function(variants, cfg) {
     if (miss_gene > 0) add("W_GENE_ANNOTATION_MISSING", "warning",
                            "Some variants lack gene annotation.", miss_gene)
   }
+  if (isTRUE(cfg_get(cfg, c("tmb", "enabled"), TRUE))) {
+    callable <- suppressWarnings(as.numeric(cfg_get(cfg, c("tmb", "callable_mb"), NA_real_)))
+    require_callable <- isTRUE(cfg_get(cfg, c("tmb", "require_callable_mb"), TRUE))
+    if (require_callable && (length(callable) != 1L || is.na(callable) || callable <= 0)) {
+      add("W_TMB_CALLABLE_MB_MISSING", "warning",
+          "TMB module ran as countable variant burden only because tmb.callable_mb is missing or invalid.", n)
+    }
+  }
+  if ("clonality_method" %in% names(variants) &&
+      any(variants$clonality_method == "vaf_proxy_no_purity", na.rm = TRUE)) {
+    add("W_CLONALITY_VAF_PROXY_ONLY", "warning",
+        "Clonality module used VAF-proxy classes for at least one variant because purity was unavailable.",
+        sum(variants$clonality_method == "vaf_proxy_no_purity", na.rm = TRUE))
+  }
+  if ("ml_status" %in% names(variants) &&
+      any(variants$ml_status == "not_evaluable_no_active_model", na.rm = TRUE)) {
+    add("W_ML_NO_ACTIVE_MODEL", "warning",
+        "ML module is enabled but no activated model was available; predictions were not generated.", n)
+  }
+  if (isTRUE(cfg_get(cfg, c("ancestry", "enabled"), FALSE))) {
+    panel <- cfg_get(cfg, c("ancestry", "marker_panel", "path"), NULL)
+    if (is.null(panel) || is.na(panel) || !file.exists(panel)) {
+      add("W_ANCESTRY_PANEL_MISSING", "warning",
+          "Ancestry module is enabled but no AIMs marker panel was available; ancestry is not evaluable.", n)
+    }
+  }
   if (length(rows) == 0) return(data.frame(
     code = character(), severity = character(), n_affected = integer(),
     message = character(), stringsAsFactors = FALSE))
@@ -338,7 +371,11 @@ build_v2_run_manifest <- function(cfg, run_dir, manifest, warnings, figures) {
       report = file.path(normalizePath(run_dir, mustWork = FALSE), "report.html"),
       tables = file.path(normalizePath(run_dir, mustWork = FALSE), "tables"),
       figures = file.path(normalizePath(run_dir, mustWork = FALSE), "figures"),
-      figure_data = file.path(normalizePath(run_dir, mustWork = FALSE), "figure_data")
+      figure_data = file.path(normalizePath(run_dir, mustWork = FALSE), "figure_data"),
+      module_status = file.path(normalizePath(run_dir, mustWork = FALSE), "tables", "module_status.tsv"),
+      tmb_summary = file.path(normalizePath(run_dir, mustWork = FALSE), "tables", "tmb_summary.tsv"),
+      clonality_summary = file.path(normalizePath(run_dir, mustWork = FALSE), "tables", "clonality_summary.tsv"),
+      ml_status = file.path(normalizePath(run_dir, mustWork = FALSE), "tables", "ml_status.tsv")
     ),
     warnings = warnings,
     figures = figures,

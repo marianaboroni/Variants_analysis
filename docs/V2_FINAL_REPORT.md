@@ -17,7 +17,8 @@ publication figure/documentation acceptance suite are not finished.
 | `b05cd2c` | added v2 CLI/API entry points |
 | `f17774b` | added traceable v2 outputs, manifest, evidence columns, and figures |
 | `d6f3acc` | added installation docs, Docker/Conda/CI files, man pages, and check fixes |
-| documentation alignment stage | rewrites README/tutorial/docs around the current v2 workflow only |
+| `300833d` | rewrote README/tutorial/quickstart/docs around the current v2 workflow only |
+| auxiliary module stage | restored TMB/burden, clonality, ancestry status, and activated-model ML as functional v2 auxiliary modules |
 
 ## Real-data validation
 
@@ -27,14 +28,14 @@ Input:
 data/test/WGS_all_patients_first100k.tsv
 ```
 
-Final post-commit validation run:
+Latest auxiliary-module validation run:
 
 ```bash
 /usr/bin/time -l Rscript exec/tumoronly run \
   --input data/test/WGS_all_patients_first100k.tsv \
   --config config/wgs_all_patients_subset_config.yml \
   --output results/wgs_all_patients_subset_filter \
-  --run-id real_data_phase4_v2_outputs_final
+  --run-id real_data_modules_v2_callable_gate
 ```
 
 Results:
@@ -46,10 +47,10 @@ Results:
 | PASS | 51,531 |
 | REVIEW | 4,996 |
 | FAIL | 43,473 |
-| Pipeline runtime in `run_manifest.json` | 130.59 s |
-| Wall time | 139.53 s |
-| Maximum resident set size | 1,439,297,536 bytes |
-| Peak memory footprint | 3,066,564,288 bytes |
+| Pipeline runtime in `run_manifest.json` | 744.62 s |
+| Wall time | 762.28 s |
+| Maximum resident set size | 853,487,616 bytes |
+| Peak memory footprint | 3,082,560,448 bytes |
 
 Warnings:
 
@@ -60,8 +61,22 @@ Warnings:
 | `W_COSMIC_NOT_CONFIGURED` | 100,000 |
 | `W_DRIVER_RESOURCES_NOT_CONFIGURED` | 100,000 |
 | `W_GENE_ANNOTATION_MISSING` | 33,275 |
+| `W_TMB_CALLABLE_MB_MISSING` | 100,000 |
+| `W_CLONALITY_VAF_PROXY_ONLY` | 51,879 |
+| `W_ML_NO_ACTIVE_MODEL` | 100,000 |
+| `W_ANCESTRY_PANEL_MISSING` | 100,000 |
 
-The final `run_manifest.json` records commit `f17774b`.
+Auxiliary module statuses on the real file:
+
+| Module | Status | Interpretation |
+|---|---|---|
+| TMB/burden | `not_evaluable_missing_callable_mb` | 106 countable coding candidates; no mutations/Mb value was reported because no validated callable territory denominator was configured |
+| Clonality | `evaluated` | 51,879 somatic-candidate rows received VAF-proxy labels because purity was absent |
+| ML | `not_evaluable_no_active_model` | no activated reviewed-label model was available |
+| Ancestry | `not_evaluable` | no AIMs marker panel was configured |
+
+The auxiliary modules did not change `final_class`, `filter_status`,
+`somatic_score`, or the fail-safe scientific rules.
 
 ## Implemented interface changes
 
@@ -93,6 +108,11 @@ Each completed run now writes:
 - `tables/known_drivers.tsv`
 - `tables/sample_summary.tsv`
 - `tables/filter_audit.tsv`
+- `tables/module_status.tsv`
+- `tables/tmb_summary.tsv`
+- `tables/clonality_summary.tsv`
+- `tables/ml_status.tsv`
+- `tables/ancestry_summary.tsv` when ancestry is enabled
 - `figures/*.pdf`
 - `figures/*.svg`
 - `figures/*.png`
@@ -125,6 +145,15 @@ Targeted v2 tests:
 
 ```text
 Rscript -e 'testthat::test_file("tests/testthat/test-v2-interface.R", reporter = "summary")'
+Result: 0 failures
+
+Rscript -e 'testthat::test_file("tests/testthat/test-v2-modules.R", reporter = "summary")'
+Result: 0 failures
+
+Rscript -e 'testthat::test_file("tests/testthat/test-review-ml.R", reporter = "summary")'
+Result: 0 failures
+
+Rscript -e 'testthat::test_file("tests/testthat/test-ancestry.R", reporter = "summary")'
 Result: 0 failures
 ```
 
@@ -183,9 +212,9 @@ Result: PASS with warnings
 
 The README, quick start, tutorial, installation guide, configuration guide,
 architecture guide, report guide, and vignette entry point have been rewritten
-around `init`, `validate`, `run`, and `report`. Legacy references to TMB,
-clonality, ancestry, dashboard, ML, and obsolete output tables were removed from
-the user-facing v2 documentation or reframed explicitly as out of scope.
+around `init`, `validate`, `run`, and `report`. TMB/burden, clonality, ancestry,
+and ML are documented as functional auxiliary modules that write explicit
+status/output tables and do not override the audited core classifier.
 
 These files have been added, but a clean installation from each route still
 needs final execution for Conda, Docker, and remote GitHub Actions. Local
@@ -219,6 +248,14 @@ Result: Status OK
   multi-sample cohort recurrence behavior.
 - COSMIC and driver resources were not configured in the real-data validation.
 - TLOD and parsed strand-bias evidence are missing from the real TSV.
+- TMB in mutations/Mb was not evaluable on the real file because no validated
+  callable territory denominator was configured; only countable burden was
+  reported.
+- Clonality on the real file is VAF-proxy only because tumor purity was absent.
+- ML was not evaluable on the real file because no reviewed-label model was
+  activated.
+- Genetic ancestry was not evaluable on the real file because no AIMs marker
+  panel was configured.
 - The report is improved by the new output contract but has not yet been fully
   rewritten into the complete 16-section v2 report specification.
 - The full publication figure set is not complete.

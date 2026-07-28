@@ -72,6 +72,10 @@ Open `results/my_run/report.html`, then inspect:
 - `tables/classified_variants.tsv`
 - `tables/filter_audit.tsv`
 - `tables/sample_summary.tsv`
+- `tables/module_status.tsv`
+- `tables/tmb_summary.tsv`
+- `tables/clonality_summary.tsv`
+- `tables/ml_status.tsv`
 - `figure_data/*.tsv`
 
 The per-variant evidence trail is in:
@@ -80,6 +84,9 @@ The per-variant evidence trail is in:
 - `evidence_against_classification`
 - `missing_evidence`
 - `classification_explanation`
+- `tmb_countable`
+- `clonality_class`
+- `ml_status`
 
 ## 6. Real Data Gate
 

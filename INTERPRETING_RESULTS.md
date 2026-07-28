@@ -25,9 +25,27 @@ Read these columns together:
 - `evidence_against_classification`
 - `missing_evidence`
 - `classification_explanation`
+- `tmb_countable`
+- `clonality_class`
+- `clonality_method`
+- `ml_status`
 
 A useful result is not one without missing evidence. A useful result is one
 where the missing evidence is explicit.
+
+## Auxiliary modules
+
+Start with `tables/module_status.tsv`.
+
+| Module | Main table | How to interpret |
+|---|---|---|
+| TMB/burden | `tmb_summary.tsv` | TMB in mutations/Mb only when `callable_mb` is configured; otherwise burden counts only |
+| Clonality | `clonality_summary.tsv` | CCF-based when purity/CN evidence exists; VAF-proxy labels are explicitly marked |
+| Ancestry | `ancestry_summary.tsv` | experimental, non-diagnostic genetic ancestry from user-supplied AIMs panel |
+| ML | `ml_status.tsv` | activated-model predictions for review prioritization only |
+
+None of these modules should be used to override `final_class` without an
+explicit scientific change and new validation.
 
 ## Warnings
 
@@ -41,6 +59,10 @@ Examples:
 | `W_TLOD_MISSING` | caller-specific quality evidence incomplete |
 | `W_COSMIC_NOT_CONFIGURED` | COSMIC evidence unavailable |
 | `W_DRIVER_RESOURCES_NOT_CONFIGURED` | driver interpretation limited |
+| `W_TMB_CALLABLE_MB_MISSING` | burden was counted, but TMB is not evaluable |
+| `W_CLONALITY_VAF_PROXY_ONLY` | clonality used VAF-proxy labels because purity was missing |
+| `W_ML_NO_ACTIVE_MODEL` | ML is enabled but no activated model was available |
+| `W_ANCESTRY_PANEL_MISSING` | ancestry is enabled but the AIMs panel is unavailable |
 
 ## Figures
 
@@ -58,4 +80,3 @@ The figure data are authoritative for reproduction and custom plotting.
 Tumor-only analysis cannot confirm somatic or germline status. Confirmation
 requires matched normal, orthogonal validation, or a clinically validated
 workflow appropriate to the question.
-

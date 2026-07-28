@@ -85,12 +85,17 @@ run_tumor_only <- function(config, run_id = NULL) {
   variants <- add_unified_labels(variants)
   variants <- apply_brazilian_population_rules(variants, cfg)   # documented population REVIEW rule
   variants <- apply_adaptive_review(variants, cfg)              # documented adaptive-technical REVIEW rule
+
+  log_step("run", "auxiliary modules: ML, TMB/burden, clonality")
+  aux <- run_auxiliary_modules(variants, cfg)
+  variants <- aux$variants
   variants <- add_tumoronly_evidence_columns(variants, cfg)     # v2 traceability layer; no classification changes
 
   # ---- outputs ----------------------------------------------------------
   audit <- write_run_tables(variants, dirs)
   write_tsv(predictor_inventory %||% data.frame(note = "no predictors"),
             file.path(dirs$tables, "predictor_inventory.tsv"))
+  write_auxiliary_module_tables(aux, dirs)
   write_summary_tables(variants, dirs)
   export_review_template(variants, file.path(dirs$tables, "review_template.tsv"))
   if (!is.null(adaptive_thresholds))
@@ -114,7 +119,16 @@ run_tumor_only <- function(config, run_id = NULL) {
   if (isTRUE(cfg_get(cfg, c("ancestry", "enabled"), FALSE))) {
     log_step("run", "genetic-ancestry inference (experimental)")
     anc <- tryCatch(infer_ancestry(variants, cfg, build),
-                    error = function(e) { log_step("ancestry", "failed", error = conditionMessage(e)); NULL })
+                    error = function(e) {
+                      log_step("ancestry", "failed", error = conditionMessage(e))
+                      list(summary = data.frame(
+                        sample_id = unique(as.character(variants$sample_id)),
+                        ANCESTRY_INFERENCE_STATUS = "failed",
+                        ANCESTRY_SNPS_USED = 0L,
+                        reason = conditionMessage(e),
+                        stringsAsFactors = FALSE),
+                        snps = data.frame(), qc = data.frame(), projection = data.frame())
+                    })
     if (!is.null(anc)) {
       write_tsv(anc$summary, file.path(dirs$tables, "ancestry_summary.tsv"))
       if (nrow(anc$snps) > 0) write_tsv(anc$snps, file.path(dirs$tables, "ancestry_snps.tsv.gz"))
@@ -123,6 +137,8 @@ run_tumor_only <- function(config, run_id = NULL) {
       tryCatch(create_ancestry_plots(anc, dirs$plots, cfg),
                error = function(e) log_step("ancestry", "plots failed", error = conditionMessage(e)))
     }
+    aux$module_status <- update_module_status(aux$module_status, ancestry_module_status(cfg, anc))
+    write_tsv(aux$module_status, file.path(dirs$tables, "module_status.tsv"))
   }
 
   manifest <- build_run_manifest(cfg, run_dir, rid, build, variants, n_input, audit, t0)
@@ -153,6 +169,131 @@ run_tumor_only <- function(config, run_id = NULL) {
            seconds = round(as.numeric(difftime(Sys.time(), t0, units = "secs")), 1))
   invisible(list(variants = variants, run_dir = run_dir, manifest = manifest,
                  audit = audit, report_rendered = render_ok))
+}
+
+#' @keywords internal
+run_auxiliary_modules <- function(variants, cfg) {
+  statuses <- list()
+
+  ml <- tryCatch(apply_ml_predictions(variants, cfg), error = function(e) {
+    log_step("ml", "ML module failed", error = conditionMessage(e))
+    list(variants = add_empty_ml_columns(variants, "failed"),
+         status = data.frame(module = "ml", enabled = TRUE, status = "failed",
+           objective = cfg_get(cfg, c("ml", "objective"), "P_TRUE_VARIANT"),
+           db_dir = cfg_get(cfg, c("ml", "db_dir"), "db/variant_evidence"),
+           model_id = NA_character_, n_variants_scored = 0L,
+           n_features_used = 0L, missing_model_features = NA_character_,
+           message = conditionMessage(e), stringsAsFactors = FALSE))
+  })
+  variants <- ml$variants
+  statuses[[length(statuses) + 1]] <- normalize_module_status(ml$status)
+
+  tmb <- tryCatch(calculate_tmb(variants, cfg), error = function(e) {
+    log_step("tmb", "TMB/burden module failed", error = conditionMessage(e))
+    variants$tmb_countable <- FALSE
+    list(variants = variants, summary = module_failure_summary(variants, "tmb", conditionMessage(e)))
+  })
+  variants <- tmb$variants
+  statuses[[length(statuses) + 1]] <- tmb_module_status(tmb$summary)
+
+  clonality <- tryCatch(add_clonality_estimates(variants, cfg), error = function(e) {
+    log_step("clonality", "clonality module failed", error = conditionMessage(e))
+    list(variants = add_empty_clonality_columns(variants, "failed"),
+         summary = module_failure_summary(variants, "clonality", conditionMessage(e)))
+  })
+  variants <- clonality$variants
+  statuses[[length(statuses) + 1]] <- clonality_module_status(clonality$summary)
+  statuses[[length(statuses) + 1]] <- ancestry_module_status(cfg, NULL)
+
+  list(
+    variants = variants,
+    ml_status = ml$status,
+    tmb_summary = tmb$summary,
+    clonality_summary = clonality$summary,
+    module_status = as.data.frame(data.table::rbindlist(statuses, fill = TRUE, use.names = TRUE))
+  )
+}
+
+#' @keywords internal
+write_auxiliary_module_tables <- function(aux, dirs) {
+  write_tsv(aux$module_status, file.path(dirs$tables, "module_status.tsv"))
+  write_tsv(aux$ml_status, file.path(dirs$tables, "ml_status.tsv"))
+  write_tsv(aux$tmb_summary, file.path(dirs$tables, "tmb_summary.tsv"))
+  write_tsv(aux$clonality_summary, file.path(dirs$tables, "clonality_summary.tsv"))
+  invisible(NULL)
+}
+
+normalize_module_status <- function(x) {
+  if (!is.data.frame(x)) return(data.frame(module = "unknown", status = "unknown", stringsAsFactors = FALSE))
+  x
+}
+
+tmb_module_status <- function(summary) {
+  if (!is.data.frame(summary) || nrow(summary) == 0) {
+    return(data.frame(module = "tmb", enabled = TRUE, status = "not_evaluable_no_samples",
+                      message = "No samples available.", stringsAsFactors = FALSE))
+  }
+  data.frame(module = "tmb", enabled = TRUE,
+             status = paste(unique(summary$module_status), collapse = ";"),
+             n_variants_scored = sum(summary$n_tmb_countable, na.rm = TRUE),
+             message = paste(unique(summary$interpretation), collapse = " "),
+             stringsAsFactors = FALSE)
+}
+
+clonality_module_status <- function(summary) {
+  if (!is.data.frame(summary) || nrow(summary) == 0) {
+    return(data.frame(module = "clonality", enabled = TRUE, status = "not_evaluable_no_samples",
+                      message = "No samples available.", stringsAsFactors = FALSE))
+  }
+  status <- if (sum(summary$n_clonality_evaluable, na.rm = TRUE) > 0) "evaluated" else "not_evaluable"
+  data.frame(module = "clonality", enabled = TRUE, status = status,
+             n_variants_scored = sum(summary$n_clonality_evaluable, na.rm = TRUE),
+             message = paste(unique(summary$limitation), collapse = " "),
+             stringsAsFactors = FALSE)
+}
+
+module_failure_summary <- function(variants, module, message) {
+  samples <- module_sample_frame(variants)
+  samples$module_status <- "failed"
+  samples$message <- message
+  samples$module <- module
+  samples
+}
+
+ancestry_module_status <- function(cfg, anc = NULL) {
+  enabled <- isTRUE(cfg_get(cfg, c("ancestry", "enabled"), FALSE))
+  if (!enabled) {
+    return(data.frame(module = "ancestry", enabled = FALSE, status = "disabled",
+      n_variants_scored = 0L, message = "Ancestry module disabled.",
+      stringsAsFactors = FALSE))
+  }
+  if (is.null(anc)) {
+    return(data.frame(module = "ancestry", enabled = TRUE, status = "not_run_yet",
+      n_variants_scored = 0L, message = "Ancestry module is enabled and will run after core outputs.",
+      stringsAsFactors = FALSE))
+  }
+  status <- if ("summary" %in% names(anc) && nrow(anc$summary) > 0 &&
+                any(anc$summary$ANCESTRY_INFERENCE_STATUS == "failed", na.rm = TRUE)) {
+    "failed"
+  } else if ("summary" %in% names(anc) && nrow(anc$summary) > 0 &&
+             any(anc$summary$ANCESTRY_INFERENCE_STATUS == "evaluated", na.rm = TRUE)) {
+    "evaluated"
+  } else {
+    "not_evaluable"
+  }
+  n_used <- if ("summary" %in% names(anc) && "ANCESTRY_SNPS_USED" %in% names(anc$summary))
+    sum(anc$summary$ANCESTRY_SNPS_USED, na.rm = TRUE) else 0L
+  reason <- if ("summary" %in% names(anc) && "reason" %in% names(anc$summary))
+    paste(unique(stats::na.omit(anc$summary$reason)), collapse = ";") else ""
+  if (!nzchar(reason)) reason <- "Genetic ancestry is experimental, non-diagnostic, and never filters variants."
+  data.frame(module = "ancestry", enabled = TRUE, status = status,
+    n_variants_scored = n_used, message = reason, stringsAsFactors = FALSE)
+}
+
+update_module_status <- function(module_status, row) {
+  if (!is.data.frame(module_status) || nrow(module_status) == 0) return(row)
+  module_status <- module_status[module_status$module != row$module[1], , drop = FALSE]
+  as.data.frame(data.table::rbindlist(list(module_status, row), fill = TRUE, use.names = TRUE))
 }
 
 #' @keywords internal
