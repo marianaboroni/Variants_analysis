@@ -1,0 +1,95 @@
+minimal_v2_tsv <- function() {
+  path <- tempfile(fileext = ".tsv")
+  data.table::fwrite(data.frame(
+    Sample_Barcode = c("S1", "S1", "S1"),
+    CHROM = c("chr1", "chr1", "chr2"),
+    START = c(101, 202, 303),
+    REF = c("A", "G", "C"),
+    ALT = c("T", "A", "CT"),
+    FILTER = "PASS",
+    ref_count = c(40, 30, 60),
+    alt_count = c(20, 12, 15),
+    AF = c(0.333, 0.286, 0.200),
+    MBQ = c(35, 34, 33),
+    MMQ = c(60, 55, 50),
+    SYMBOL = c("TP53", "KRAS", "BRAF"),
+    Consequence = c("missense_variant", "synonymous_variant", "inframe_insertion"),
+    stringsAsFactors = FALSE
+  ), path, sep = "\t")
+  path
+}
+
+minimal_v2_config <- function(input = NULL, output_dir = tempfile("tumoronly_results")) {
+  cfg <- tumoronly_default_config()
+  cfg$input$path <- input
+  cfg$input$genome_build <- "GRCh38"
+  cfg$analysis$output_dir <- output_dir
+  cfg$analysis$run_id <- "v2_test"
+  cfg$cosmic$processed_db <- NULL
+  cfg$cosmic$release <- NULL
+  cfg$driver_resources$driver_genes <- NULL
+  cfg$driver_resources$hotspots <- NULL
+  cfg$ancestry$enabled <- FALSE
+  cfg$plots$minimum_mutations_for_rainfall <- 1000
+  cfg
+}
+
+test_that("write_tumoronly_config_template writes and refuses accidental overwrite", {
+  cfg_file <- tempfile(fileext = ".yml")
+  expect_false(file.exists(cfg_file))
+  write_tumoronly_config_template(cfg_file)
+  expect_true(file.exists(cfg_file))
+  cfg <- yaml::read_yaml(cfg_file)
+  expect_true("technical_filters" %in% names(cfg))
+  expect_error(write_tumoronly_config_template(cfg_file), "already exists")
+  expect_silent(write_tumoronly_config_template(cfg_file, force = TRUE))
+})
+
+test_that("validate_tumoronly_input accepts a minimal real TSV contract", {
+  input <- minimal_v2_tsv()
+  cfg <- minimal_v2_config(input)
+  res <- validate_tumoronly_input(config = cfg)
+  expect_true(res$ok)
+  expect_equal(res$format, "tsv")
+  expect_equal(res$genome_build, "GRCh38")
+  expect_true("W_TLOD_MISSING" %in% res$issues$code)
+  expect_equal(res$summary$value[res$summary$metric == "samples"], "1")
+  expect_equal(res$summary$value[res$summary$metric == "depth_available"], "TRUE")
+})
+
+test_that("validate_tumoronly_input blocks TSVs without explicit genome build", {
+  input <- minimal_v2_tsv()
+  cfg <- minimal_v2_config(input)
+  cfg$input$genome_build <- NULL
+  res <- validate_tumoronly_input(config = cfg)
+  expect_false(res$ok)
+  expect_true("E_GENOME_BUILD" %in% res$issues$code)
+})
+
+test_that("CLI validate shares the package validation implementation", {
+  input <- minimal_v2_tsv()
+  cfg_file <- tempfile(fileext = ".yml")
+  yaml::write_yaml(minimal_v2_config(input), cfg_file)
+  out_html <- tempfile(fileext = ".html")
+  root <- get(".tumoronly_root", envir = globalenv())
+  script <- file.path(root, "exec", "tumoronly")
+  cmd <- c(script, "validate", "--input", input, "--config", cfg_file,
+           "--output", out_html)
+  res <- system2("Rscript", cmd, stdout = TRUE, stderr = TRUE)
+  expect_null(attr(res, "status"))
+  expect_true(any(grepl("Validation: PASS", res, fixed = TRUE)))
+  expect_true(file.exists(out_html))
+})
+
+test_that("run_tumoronly executes the workflow through the v2 API wrapper", {
+  skip_if_not_installed("maftools")
+  input <- minimal_v2_tsv()
+  cfg <- minimal_v2_config(input)
+  cfg$analysis$run_id <- "api_wrapper"
+  capture.output({
+    res <- suppressWarnings(suppressMessages(run_tumoronly(config = cfg, strict = TRUE)))
+  })
+  expect_true(res$validation$ok)
+  expect_true(file.exists(file.path(res$run_dir, "tables", "variants_all.tsv.gz")))
+  expect_true(file.exists(file.path(res$run_dir, "report", "tumor_only_report.html")))
+})

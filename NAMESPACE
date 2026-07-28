@@ -1,7 +1,11 @@
 # Hand-maintained (roxygen2 not required to load the package).
 # Public API only; all other functions are internal.
 export(run_tumor_only)
+export(run_tumoronly)
 export(read_variant_input)
+export(validate_tumoronly_input)
+export(write_tumoronly_config_template)
+export(tumoronly_default_config)
 export(prepare_cosmic_db)
 export(build_cosmic_raw_input)
 export(prepare_brazilian_db)

@@ -63,7 +63,12 @@ main <- function() {
   argv <- commandArgs(trailingOnly = TRUE)
   if (length(argv) == 0) {
     cat("Usage: tumoronly <command> [options]\n",
-        "  doctor | prepare-cosmic | run | annotate-oncokb | report\n",
+        "  init | validate | run | report | doctor\n",
+        "  init     --output config.yml [--force]\n",
+        "  validate --input variants.tsv --config config.yml [--output validation.html] [--permissive]\n",
+        "  run      --input variants.tsv --config config.yml --output results/ [--run-id ID] [--permissive] [--skip-validation]\n",
+        "  report   --run-dir results/ID [--output report.html]\n",
+        "  prepare-cosmic | annotate-oncokb\n",
         "  build-cosmic-input --config config.yml [--force]   (build cosmic.raw_file from raw COSMIC v104 files)\n",
         "  prepare-abraom      --config config.yml [--force]   (build population.brazilian.db from an ANNOVAR TSV)\n",
         "  prepare-ancestry-reference --config config.yml\n",
@@ -82,6 +87,24 @@ main <- function() {
   obj <- get_opt(args, "--objective", "P_TRUE_VARIANT")
 
   ok <- switch(cmd,
+    "init" = {
+      out <- get_opt(args, "--output", "config.yml")
+      write_tumoronly_config_template(out, force = has_flag(args, "--force"))
+      cat("Wrote config template:", out, "\n"); 0 },
+    "validate" = {
+      cfg <- get_opt(args, "--config", NULL)
+      inp <- get_opt(args, "--input", NULL)
+      out <- get_opt(args, "--output", NULL)
+      strict <- !has_flag(args, "--permissive")
+      v <- validate_tumoronly_input(input = inp, config = cfg, strict = strict, output = out)
+      cat("Validation:", if (isTRUE(v$ok)) "PASS" else "FAIL", "\n")
+      if (nrow(v$issues) > 0) {
+        for (i in seq_len(nrow(v$issues))) {
+          cat(sprintf("[%s] %s %s: %s\n", v$issues$severity[i], v$issues$code[i],
+                      v$issues$field[i], v$issues$message[i]))
+        }
+      }
+      if (isTRUE(v$ok)) 0 else 1 },
     "doctor" = { d <- check_installation(); if (isTRUE(d$ok)) 0 else 1 },
     "prepare-cosmic" = {
       cfg <- get_opt(args, "--config"); if (is.null(cfg)) stop("--config is required")
@@ -98,13 +121,24 @@ main <- function() {
           "Set this as population.brazilian.db before running `run`.\n"); 0 },
     "run" = {
       cfg <- get_opt(args, "--config"); if (is.null(cfg)) stop("--config is required")
-      run_tumor_only(cfg, run_id = get_opt(args, "--run-id")); 0 },
+      run_tumoronly(input = get_opt(args, "--input", NULL), config = cfg,
+                    output_dir = get_opt(args, "--output", NULL),
+                    run_id = get_opt(args, "--run-id"),
+                    strict = !has_flag(args, "--permissive"),
+                    validate = !has_flag(args, "--skip-validation")); 0 },
     "annotate-oncokb" = {
       rd <- get_opt(args, "--run-dir"); if (is.null(rd)) stop("--run-dir is required")
       annotate_oncokb(rd, scope = get_opt(args, "--scope", "retained")); 0 },
     "report" = {
       rd <- get_opt(args, "--run-dir"); if (is.null(rd)) stop("--run-dir is required")
-      render_tumor_only_report(rd); 0 },
+      html <- render_tumor_only_report(rd)
+      out <- get_opt(args, "--output", NULL)
+      if (!is.null(out)) {
+        dir.create(dirname(out), recursive = TRUE, showWarnings = FALSE)
+        file.copy(html, out, overwrite = TRUE)
+        cat("Copied report to", out, "\n")
+      }
+      0 },
     "export-review-template" = {
       rd <- get_opt(args, "--run-dir"); if (is.null(rd)) stop("--run-dir is required")
       v <- resolve("read_variants")(file.path(rd, "tables", "variants_all.tsv.gz"), "\t")
