@@ -85,6 +85,7 @@ run_tumor_only <- function(config, run_id = NULL) {
   variants <- add_unified_labels(variants)
   variants <- apply_brazilian_population_rules(variants, cfg)   # documented population REVIEW rule
   variants <- apply_adaptive_review(variants, cfg)              # documented adaptive-technical REVIEW rule
+  variants <- add_tumoronly_evidence_columns(variants, cfg)     # v2 traceability layer; no classification changes
 
   # ---- outputs ----------------------------------------------------------
   audit <- write_run_tables(variants, dirs)
@@ -126,12 +127,26 @@ run_tumor_only <- function(config, run_id = NULL) {
 
   manifest <- build_run_manifest(cfg, run_dir, rid, build, variants, n_input, audit, t0)
   manifest$input_format <- ing$format
+  v2_artifacts <- tryCatch(
+    write_tumoronly_v2_artifacts(variants, cfg, dirs, manifest, audit),
+    error = function(e) {
+      log_step("v2", "v2 artifact creation failed", error = conditionMessage(e))
+      NULL
+    })
+  if (!is.null(v2_artifacts)) manifest$v2_artifacts <- v2_artifacts$summary
   jsonlite::write_json(manifest, file.path(run_dir, "manifest.json"),
                        auto_unbox = TRUE, pretty = TRUE, null = "null")
 
-  render_ok <- tryCatch({ render_tumor_only_report(run_dir); TRUE },
+  render_ok <- tryCatch({
+    report_path <- render_tumor_only_report(run_dir)
+    copy_report_to_v2_root(run_dir, report_path)
+    TRUE },
                         error = function(e) { log_step("report", "report skipped",
                           error = conditionMessage(e)); FALSE })
+
+  manifest$runtime_seconds <- round(as.numeric(difftime(Sys.time(), t0, units = "secs")), 2)
+  manifest$report_rendered <- render_ok
+  update_tumoronly_run_manifests(run_dir, manifest, report_rendered = render_ok)
 
   log_step("run", "done", run_dir = run_dir,
            retained = nrow(retained), excluded = sum(variants$filter_status == "FAIL"),
@@ -147,6 +162,8 @@ setup_run_dir <- function(run_dir) {
     tables = file.path(run_dir, "tables"),
     maf = file.path(run_dir, "maf"),
     plots = file.path(run_dir, "plots"),
+    figures = file.path(run_dir, "figures"),
+    figure_data = file.path(run_dir, "figure_data"),
     report = file.path(run_dir, "report"),
     logs = file.path(run_dir, "logs"))
   for (d in dirs) dir.create(d, recursive = TRUE, showWarnings = FALSE)

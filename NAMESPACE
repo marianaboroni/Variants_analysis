@@ -3,6 +3,8 @@
 export(run_tumor_only)
 export(run_tumoronly)
 export(read_variant_input)
+export(add_tumoronly_evidence_columns)
+export(create_tumoronly_figures)
 export(validate_tumoronly_input)
 export(write_tumoronly_config_template)
 export(tumoronly_default_config)

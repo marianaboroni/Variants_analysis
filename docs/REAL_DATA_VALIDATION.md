@@ -375,9 +375,86 @@ They are examples of algorithmic tumor-only classification, not clinical truth.
 | `likely_artifact` | `chr13:113403869:G:GACCCTG...` | `ADPRHL1` | `strong_artifact_or_pon`; `low_mbq`; technical artifact flag | none strong enough to retain | no TLOD/QUAL; no orthogonal validation |
 | `technical_fail` | `chr15:97487289:G:A` | `LINC00923` | low VAF hard-filter failure (`AF=0.013`) | cannot evaluate biology after technical fail | no TLOD/QUAL; no matched normal |
 
-The current tables contain `evidence_for_somatic` and
-`evidence_against_somatic`, but they do not yet contain a complete structured
-`missing_evidence` column for every row. That is a required v2 product feature.
+The Phase 1 tables contained `evidence_for_somatic` and
+`evidence_against_somatic`, but did not yet contain a complete structured
+`missing_evidence` column for every row. That gap was carried into v2 as a
+product requirement rather than treated as validated behavior.
+
+## Phase 4 v2 output rerun
+
+After implementing the v2 output contract, the real input was executed again:
+
+```bash
+/usr/bin/time -l Rscript exec/tumoronly run \
+  --input data/test/WGS_all_patients_first100k.tsv \
+  --config config/wgs_all_patients_subset_config.yml \
+  --output results/wgs_all_patients_subset_filter \
+  --run-id real_data_phase4_v2_outputs
+```
+
+This rerun generated the v2 output structure:
+
+- `report.html`
+- `run_manifest.json`
+- `config_used.yaml`
+- `session_info.txt`
+- `tables/all_variants.tsv`
+- `tables/classified_variants.tsv`
+- `tables/high_confidence_somatic.tsv`
+- `tables/likely_germline.tsv`
+- `tables/likely_artifact.tsv`
+- `tables/known_drivers.tsv`
+- `tables/sample_summary.tsv`
+- `tables/filter_audit.tsv`
+- `figures/figure_01_filtering_workflow.{pdf,svg,png}`
+- `figures/figure_02_qc_overview.{pdf,svg,png}`
+- `figures/figure_03_classification.{pdf,svg,png}`
+- `figures/figure_04_vaf_depth.{pdf,svg,png}`
+- `figures/figure_05_sample_class_distribution.{pdf,svg,png}`
+- `figures/figure_06_missing_evidence.{pdf,svg,png}`
+- `figure_data/figure_01_filtering_workflow.tsv`
+- `figure_data/figure_02_qc_overview.tsv`
+- `figure_data/figure_03_classification.tsv`
+- `figure_data/figure_04_vaf_depth.tsv`
+- `figure_data/figure_05_sample_class_distribution.tsv`
+- `figure_data/figure_06_missing_evidence.tsv`
+- `logs/warnings.tsv`
+
+Counts were unchanged from the validated scientific run:
+
+| Metric | Count |
+|---|---:|
+| Input rows | 100,000 |
+| Standardized variants | 100,000 |
+| `PASS` | 51,531 |
+| `REVIEW` | 4,996 |
+| `FAIL` | 43,473 |
+
+`tables/classified_variants.tsv` now contains, for every row:
+
+- `evidence_supporting_classification`;
+- `evidence_against_classification`;
+- `missing_evidence`;
+- `classification_explanation`.
+
+The v2 warning table recorded:
+
+| Code | Affected variants | Interpretation |
+|---|---:|---|
+| `W_COHORT_RECURRENCE_NOT_EVALUABLE` | 100,000 | one active sample, so cohort recurrence cannot be used |
+| `W_TLOD_MISSING` | 100,000 | caller-specific LOD evidence is absent |
+| `W_COSMIC_NOT_CONFIGURED` | 100,000 | COSMIC evidence unavailable |
+| `W_DRIVER_RESOURCES_NOT_CONFIGURED` | 100,000 | driver classification limited |
+| `W_GENE_ANNOTATION_MISSING` | 33,275 | gene annotation missing in a subset |
+
+The first visual inspection pass confirmed that the v2 classification,
+VAF-depth, QC/score, filtering, and missing-evidence figures are non-empty and
+legible. The SVG export uses a data-driven vector fallback when the local R
+SVG/Cairo device is unavailable; PDF and PNG exports were also generated.
+
+This Phase 4 rerun does not make v2 complete. It validates the new output
+contract on the real file while preserving the same scientific classification
+counts.
 
 ## Test evidence
 
@@ -412,8 +489,9 @@ the real-data run.
 - COSMIC and driver resources are not configured; therefore driver detection and
   COSMIC contextual evidence were not validated in this run.
 - Ancestry inference is not evaluable without an AIMs reference panel.
-- Current maftools figures are useful as smoke-test outputs, not as v2
-  publication-quality figures.
+- The legacy maftools figures remain useful as smoke-test outputs. The new v2
+  figures are clearer and data-backed, but the full publication figure set
+  requested for v2 is not complete yet.
 - Tumor-only classifications remain probabilistic candidates. They must not be
   presented as clinically confirmed somatic or germline calls without matched
   normal or orthogonal validation.
@@ -435,8 +513,6 @@ The real TSV passes the Phase 1 gate after the corrections above:
 
 Proceed to v2 development, with the explicit constraint that v2 must add:
 
-- structured missing-evidence columns for every classification;
+- additional publication figures beyond the first v2 QC set;
 - a real multi-sample cohort regression fixture;
-- a formal input validation command;
-- publication-quality figures and figure data;
-- a manifest/schema/report design that does not depend on maftools side effects.
+- full documentation, installation, CI, and clean-environment validation.

@@ -93,3 +93,74 @@ test_that("run_tumoronly executes the workflow through the v2 API wrapper", {
   expect_true(file.exists(file.path(res$run_dir, "tables", "variants_all.tsv.gz")))
   expect_true(file.exists(file.path(res$run_dir, "report", "tumor_only_report.html")))
 })
+
+test_that("add_tumoronly_evidence_columns adds traceability without changing classes", {
+  x <- data.frame(
+    sample_id = "S1", final_class = "probable_somatic", filter_status = "PASS",
+    primary_reason = "probable_somatic_rule", hard_filter_reason = "PASS",
+    population_category = "population_rare_or_absent",
+    artifact_category = "artifact_not_detected",
+    recurrence_category = "recurrence_non_informative",
+    somatic_score = 0.72, technical_evidence_score = 0.8,
+    dp = 100, alt_count = 35, vaf = 0.35, tlod = NA_real_,
+    mbq = 35, mmq = 60, max_pop_af = NA_real_, gene = "TP53",
+    stringsAsFactors = FALSE
+  )
+  cfg <- tumoronly_default_config()
+  out <- add_tumoronly_evidence_columns(x, cfg)
+  expect_equal(out$final_class, x$final_class)
+  expect_true(all(c("evidence_supporting_classification",
+                    "evidence_against_classification",
+                    "missing_evidence",
+                    "classification_explanation") %in% names(out)))
+  expect_match(out$evidence_supporting_classification, "somatic_score")
+  expect_match(out$missing_evidence, "matched_normal_absent")
+  expect_match(out$classification_explanation, "probabilistic")
+})
+
+test_that("run_tumoronly writes the v2 output contract", {
+  skip_if_not_installed("ggplot2")
+  input <- minimal_v2_tsv()
+  cfg <- minimal_v2_config(input)
+  cfg$analysis$run_id <- "v2_output_contract"
+  cfg$analysis$output_dir <- tempfile("tumoronly_v2_contract")
+  capture.output({
+    res <- suppressWarnings(suppressMessages(run_tumoronly(config = cfg, strict = TRUE)))
+  })
+
+  expected <- c(
+    "report.html", "run_manifest.json", "config_used.yaml", "session_info.txt",
+    file.path("tables", "all_variants.tsv"),
+    file.path("tables", "classified_variants.tsv"),
+    file.path("tables", "high_confidence_somatic.tsv"),
+    file.path("tables", "likely_germline.tsv"),
+    file.path("tables", "likely_artifact.tsv"),
+    file.path("tables", "known_drivers.tsv"),
+    file.path("tables", "sample_summary.tsv"),
+    file.path("tables", "filter_audit.tsv"),
+    file.path("figures", "figure_manifest.tsv"),
+    file.path("figure_data", "figure_01_filtering_workflow.tsv"),
+    file.path("logs", "warnings.tsv")
+  )
+  expect_true(all(file.exists(file.path(res$run_dir, expected))))
+
+  classified <- read_variants(file.path(res$run_dir, "tables", "classified_variants.tsv"), "\t")
+  expect_true(all(c("evidence_supporting_classification",
+                    "evidence_against_classification",
+                    "missing_evidence",
+                    "classification_explanation") %in% names(classified)))
+  expect_equal(nrow(classified), nrow(res$variants))
+
+  manifest <- jsonlite::read_json(file.path(res$run_dir, "run_manifest.json"),
+                                  simplifyVector = TRUE)
+  expect_equal(manifest$tool$name, "tumoronly")
+  expect_true(manifest$run$status %in% c("completed", "completed_with_warnings"))
+  expect_equal(manifest$input$genome_build, "GRCh38")
+
+  figman <- read_variants(file.path(res$run_dir, "figures", "figure_manifest.tsv"), "\t")
+  ok <- figman[figman$figure_id == "figure_03_classification", , drop = FALSE]
+  expect_equal(ok$status, "ok")
+  expect_match(ok$files, "[.]pdf")
+  expect_match(ok$files, "[.]svg")
+  expect_match(ok$files, "[.]png")
+})
