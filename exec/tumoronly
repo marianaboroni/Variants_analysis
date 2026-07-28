@@ -27,6 +27,9 @@ find_pkg_root <- function() {
 load_package <- function() {
   root <- find_pkg_root()
   r_dir <- file.path(root, "R")
+  if (file.exists(file.path(root, "Meta", "package.rds"))) {
+    .libPaths(unique(c(dirname(root), .libPaths())))
+  }
   source_files <- if (dir.exists(r_dir)) {
     list.files(r_dir, pattern = "[.]R$", full.names = TRUE)
   } else character()

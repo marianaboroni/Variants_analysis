@@ -1,0 +1,23 @@
+name: tumoronly
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - r-base>=4.2
+  - r-data.table
+  - r-yaml
+  - r-jsonlite
+  - r-digest
+  - r-ggplot2
+  - r-rmarkdown
+  - r-knitr
+  - r-remotes
+  - r-testthat
+  - r-httr2
+  - bioconductor-maftools
+  - bioconductor-genomicranges
+  - bioconductor-iranges
+  - bioconductor-biostrings
+  - bioconductor-rtracklayer
+  - pandoc
+  - git

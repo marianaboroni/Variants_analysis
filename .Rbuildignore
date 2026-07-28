@@ -22,3 +22,14 @@
 ^config/reference_build_example\.yml$
 ^tumoronly\.Rcheck$
 ^tumoronly_.*\.tar\.gz$
+^Dockerfile$
+^environment\.yml$
+^QUICKSTART\.md$
+^INSTALLATION\.md$
+^INPUT_FORMAT\.md$
+^HOW_IT_WORKS\.md$
+^INTERPRETING_RESULTS\.md$
+^TROUBLESHOOTING\.md$
+^CONFIGURATION\.md$
+^CHANGELOG\.md$
+^CONTRIBUTING\.md$

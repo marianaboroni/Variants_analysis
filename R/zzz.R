@@ -16,5 +16,16 @@ utils::globalVariables(c(
   "locus_tumor_type_n_samples", "total_samples",
   # ggplot2 aes() symbols used in ancestry/QC plots
   "stage", "n", "reason", "PC1", "PC2", "proportion", "component", "vaf", "chrom",
-  "ANCESTRY_CALL_RATE", "ANCESTRY_CONFIDENCE", "sample_id"
+  "ANCESTRY_CALL_RATE", "ANCESTRY_CONFIDENCE", "sample_id",
+  # data.table/ggplot2 NSE symbols used in preparation and v2 output layers
+  ".cat", ".cnt", ".cnt1", ".hist", ".site", ".sub", "ac", "af", "ALT", "an",
+  "anchor_pos", "CHROM", "cosmic_count", "cosmic_id", "COSMIC_MUTATION_IDS",
+  "COSMIC_OCCURRENCE_COUNT", "COSMIC_PHENOTYPE_ID", "COSMIC_SAMPLE_ID",
+  "COSMIC_STUDY_ID", "COSMIC_TUMOR_BREAKDOWN", "COSMIC_TUMOR_TYPES",
+  "evidence", "filter", "filter_flag", "filter_status", "final_class",
+  "gene", "GENE_SYMBOL", "GENOMIC_MUTATION_ID", "HISTOLOGY_SUBTYPE_1",
+  "hom", "LEGACY_MUTATION_ID", "max_pop_af", "MUTATION_SOMATIC_STATUS",
+  "N", "n_variants", "orig_alt", "orig_chrom", "orig_pos", "orig_ref",
+  "POS", "PRIMARY_HISTOLOGY", "PRIMARY_SITE", "PUBMED_PMID", "REF", "rsid",
+  "tumor_histology", "tumor_site", "tumor_subtype", "value", "variant_type"
 ))

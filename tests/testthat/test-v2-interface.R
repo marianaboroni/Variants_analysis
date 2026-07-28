@@ -71,8 +71,17 @@ test_that("CLI validate shares the package validation implementation", {
   cfg_file <- tempfile(fileext = ".yml")
   yaml::write_yaml(minimal_v2_config(input), cfg_file)
   out_html <- tempfile(fileext = ".html")
-  root <- get(".tumoronly_root", envir = globalenv())
-  script <- file.path(root, "exec", "tumoronly")
+  root_script <- if (exists(".tumoronly_root", envir = globalenv()))
+    file.path(get(".tumoronly_root", envir = globalenv()), "exec", "tumoronly")
+    else NA_character_
+  candidates <- c(
+    root_script,
+    system.file("exec", "tumoronly", package = "tumoronly"),
+    file.path(getwd(), "exec", "tumoronly"),
+    file.path(getwd(), "..", "..", "exec", "tumoronly")
+  )
+  script <- candidates[file.exists(candidates)][1]
+  skip_if(is.na(script), "tumoronly CLI executable is not available in this test layout")
   cmd <- c(script, "validate", "--input", input, "--config", cfg_file,
            "--output", out_html)
   res <- system2("Rscript", cmd, stdout = TRUE, stderr = TRUE)

@@ -1,9 +1,10 @@
 Package: tumoronly
 Title: Traceable Tumor-Only Somatic Variant Filtering and Reporting
 Version: 0.1.0
-Authors@R:
-    person("Mariana", "Boroni", email = "marianaboroni@gmail.com",
-           role = c("aut", "cre"))
+Authors@R: person("Mariana", "Boroni", email = "marianaboroni@gmail.com",
+    role = c("aut", "cre"))
+Author: Mariana Boroni [aut, cre]
+Maintainer: Mariana Boroni <marianaboroni@gmail.com>
 Description: A reproducible pipeline for tumor-only somatic variant analysis.
     It reads a VEP-annotated VCF, validates the genome build, applies a
     documented and auditable set of tumor-only filters, annotates variants

@@ -8,6 +8,53 @@ exports a `maftools`-compatible MAF, draws oncoplots with `maftools`, and render
 explanatory HTML report. **OncoKB annotation is a separate, optional step that never
 alters filtering decisions.**
 
+## v2 workflow
+
+The user-facing workflow is:
+
+```bash
+Rscript exec/tumoronly init --output config.yaml
+
+Rscript exec/tumoronly validate \
+  --input variants.tsv \
+  --config config.yaml \
+  --output validation.html
+
+Rscript exec/tumoronly run \
+  --input variants.tsv \
+  --config config.yaml \
+  --output results
+
+Rscript exec/tumoronly report --run-dir results/<run_id>
+```
+
+The same run can be launched from R:
+
+```r
+library(tumoronly)
+
+result <- run_tumoronly(
+  input = "variants.tsv",
+  config = "config.yaml",
+  output_dir = "results"
+)
+```
+
+Start here:
+
+- [QUICKSTART.md](QUICKSTART.md)
+- [INSTALLATION.md](INSTALLATION.md)
+- [INPUT_FORMAT.md](INPUT_FORMAT.md)
+- [CONFIGURATION.md](CONFIGURATION.md)
+- [HOW_IT_WORKS.md](HOW_IT_WORKS.md)
+- [INTERPRETING_RESULTS.md](INTERPRETING_RESULTS.md)
+- [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
+
+Every v2 run writes `report.html`, `run_manifest.json`, `config_used.yaml`,
+`session_info.txt`, user-facing tables, `figure_data/*.tsv`, and PDF/SVG/PNG
+figures. Tumor-only classes are probabilistic candidates, not clinical
+confirmation without matched normal or orthogonal validation.
+
 ## 1. What it does
 
 ```
