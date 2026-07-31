@@ -67,23 +67,37 @@ expand_vcf_samples <- function(x, path) {
   pieces <- lapply(sample_cols, function(sample_col) {
     y <- x[, fixed_cols[fixed_cols %in% names(x)], drop = FALSE]
     y$Tumor_Sample_Barcode <- sample_col
-    fmt <- strsplit(as.character(y$FORMAT), ":", fixed = TRUE)
-    vals <- strsplit(as.character(x[[sample_col]]), ":", fixed = TRUE)
-    y$GT <- extract_format_field(fmt, vals, "GT")
-    y$AD <- extract_format_field(fmt, vals, "AD")
-    y$DP <- to_numeric_safe(extract_format_field(fmt, vals, "DP"))
-    y$AF <- to_numeric_safe(extract_format_field(fmt, vals, "AF"))
-    y$TLOD <- to_numeric_safe(extract_format_field(fmt, vals, "TLOD"))
+    fmt_str <- as.character(y$FORMAT)
+    val_str <- as.character(x[[sample_col]])
+    y$GT <- extract_format_field(fmt_str, val_str, "GT")
+    y$AD <- extract_format_field(fmt_str, val_str, "AD")
+    y$DP <- to_numeric_safe(extract_format_field(fmt_str, val_str, "DP"))
+    y$AF <- to_numeric_safe(extract_format_field(fmt_str, val_str, "AF"))
+    y$TLOD <- to_numeric_safe(extract_format_field(fmt_str, val_str, "TLOD"))
     y
   })
   do.call(rbind, pieces)
 }
 
-extract_format_field <- function(fmt, vals, key) {
-  out <- rep(NA_character_, length(fmt))
-  for (i in seq_along(fmt)) {
-    idx <- match(key, fmt[[i]])
-    if (!is.na(idx) && length(vals[[i]]) >= idx) out[[i]] <- vals[[i]][[idx]]
+#' Extract one FORMAT field (e.g. "DP") from colon-delimited FORMAT/genotype
+#' strings. Groups rows by their (usually 1-2 distinct, for a whole VCF)
+#' FORMAT string and extracts each group with one vectorized
+#' data.table::tstrsplit() call, instead of a per-row match()+index - needed
+#' at WGS scale (millions of rows), where a per-row R loop turns minutes of
+#' work into hours.
+#' @param fmt_str character vector, the FORMAT column (e.g. "GT:AD:DP:AF").
+#' @param val_str character vector, the matching genotype column.
+#' @keywords internal
+extract_format_field <- function(fmt_str, val_str, key) {
+  fmt_str <- as.character(fmt_str); val_str <- as.character(val_str)
+  out <- rep(NA_character_, length(fmt_str))
+  for (pattern in unique(fmt_str)) {
+    if (is.na(pattern)) next
+    idx <- match(key, strsplit(pattern, ":", fixed = TRUE)[[1]])
+    if (is.na(idx)) next
+    sel <- which(fmt_str == pattern)
+    parts <- data.table::tstrsplit(val_str[sel], ":", fixed = TRUE)
+    if (idx <= length(parts)) out[sel] <- parts[[idx]]
   }
   out
 }
@@ -143,16 +157,21 @@ extract_info_value <- function(info, key) {
   }, character(1))
 }
 
+#' Parse the FIRST pipe-delimited transcript annotation (VEP CSQ / snpEff ANN)
+#' out of every row at once with data.table::tstrsplit(), instead of a
+#' per-row x per-field double loop - the double loop is O(n_rows x n_fields)
+#' and is the single largest ingestion bottleneck at WGS scale (millions of
+#' rows x 20+ CSQ fields).
+#' @keywords internal
 parse_pipe_annotation <- function(values, fields) {
   first <- sub(",.*$", "", as.character(values))
-  parts <- strsplit(first, "[|]", perl = TRUE)
+  empty <- is.na(first) | first == ""
+  parts <- data.table::tstrsplit(first, "|", fixed = TRUE, fill = NA_character_)
+  n <- min(length(parts), length(fields))
   out <- setNames(vector("list", length(fields)), fields)
-  for (field in fields) out[[field]] <- rep(NA_character_, length(values))
-  for (i in seq_along(parts)) {
-    if (is.na(first[[i]]) || first[[i]] == "") next
-    z <- parts[[i]]
-    n <- min(length(z), length(fields))
-    for (j in seq_len(n)) out[[fields[[j]]]][[i]] <- z[[j]]
+  for (j in seq_along(fields)) {
+    out[[j]] <- if (j <= n) parts[[j]] else rep(NA_character_, length(values))
+    if (any(empty)) out[[j]][empty] <- NA_character_
   }
   as.data.frame(out, stringsAsFactors = FALSE)
 }
