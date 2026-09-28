@@ -31,13 +31,25 @@ save_plot_pair <- function(out_dir, name, draw, width = 9, height = 7) {
   files <- character()
   pdf_path <- file.path(out_dir, paste0(name, ".pdf"))
   png_path <- file.path(out_dir, paste0(name, ".png"))
-  ok <- TRUE
-  grDevices::pdf(pdf_path, width = width, height = height)
-  ok <- tryCatch({ draw(); TRUE }, error = function(e) FALSE); grDevices::dev.off()
-  if (ok && file.exists(pdf_path) && file.info(pdf_path)$size > 0) files <- c(files, pdf_path) else unlink(pdf_path)
-  grDevices::png(png_path, width = width * 100, height = height * 100, res = 100)
-  ok2 <- tryCatch({ draw(); TRUE }, error = function(e) FALSE); grDevices::dev.off()
-  if (ok2 && file.exists(png_path) && file.info(png_path)$size > 0) files <- c(files, png_path) else unlink(png_path)
+  # Opening the device itself (not just draw()) must be guarded too: a device
+  # that fails to open (e.g. no X11 on a headless HPC node) must not abort the
+  # whole plot set for every remaining plot.
+  opened_pdf <- tryCatch({ grDevices::pdf(pdf_path, width = width, height = height); TRUE },
+                         error = function(e) FALSE)
+  if (opened_pdf) {
+    ok <- tryCatch({ draw(); TRUE }, error = function(e) FALSE); grDevices::dev.off()
+    if (ok && file.exists(pdf_path) && file.info(pdf_path)$size > 0) files <- c(files, pdf_path) else unlink(pdf_path)
+  }
+  # type = "cairo" renders through the Cairo library instead of Xlib, so it
+  # doesn't need a live X11 display (grDevices::png()'s default backend does).
+  opened_png <- tryCatch({
+    grDevices::png(png_path, width = width * 100, height = height * 100, res = 100, type = "cairo")
+    TRUE
+  }, error = function(e) FALSE)
+  if (opened_png) {
+    ok2 <- tryCatch({ draw(); TRUE }, error = function(e) FALSE); grDevices::dev.off()
+    if (ok2 && file.exists(png_path) && file.info(png_path)$size > 0) files <- c(files, png_path) else unlink(png_path)
+  }
   files
 }
 

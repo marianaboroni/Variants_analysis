@@ -5,14 +5,27 @@ read_config <- function(path) {
   yaml::read_yaml(path)
 }
 
-read_variants <- function(path, delimiter = "\t") {
+read_variants <- function(path, delimiter = "\t", select = NULL) {
   if (!file.exists(path)) {
     stop("Input variant file not found: ", path)
   }
   if (grepl("[.]vcf([.]gz)?$", path, ignore.case = TRUE)) {
     return(read_annotated_vcf(path))
   }
-  data.table::fread(path, sep = delimiter, data.table = FALSE, na.strings = c("", ".", "NA"))
+  if (grepl("[.]gz$", path, ignore.case = TRUE)) {
+    return(tryCatch(
+      data.table::fread(path, sep = delimiter, select = select, data.table = FALSE, na.strings = c("", ".", "NA")),
+      error = function(e) {
+        if (!grepl("memory map", conditionMessage(e), ignore.case = TRUE)) stop(e)
+        # fread's native gz decompression mmaps the decompressed buffer, which can
+        # fail with "could not memory map it" on clusters with restrictive virtual
+        # address space limits or fragmented address space late in a long run.
+        # Piping through zcat avoids that mmap path entirely.
+        data.table::fread(cmd = paste("zcat", shQuote(path)), sep = delimiter, select = select,
+                           data.table = FALSE, na.strings = c("", ".", "NA"))
+      }))
+  }
+  data.table::fread(path, sep = delimiter, select = select, data.table = FALSE, na.strings = c("", ".", "NA"))
 }
 
 read_annotated_vcf <- function(path) {

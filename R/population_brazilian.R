@@ -120,7 +120,22 @@ load_brazilian_db <- function(cfg, build) {
   if (!identical(db_build, build))
     warning(sprintf("Brazilian DB build (%s) != analysis build (%s); matching may be incomplete. Prepare a lifted copy.",
                     db_build, build), call. = FALSE)
-  d <- read_variants(path, "\t")
+  # ABraOM-scale Brazilian DBs are tens of millions of rows; only 8 of the
+  # possible columns are ever used below (the rest, e.g. rsID and the
+  # Original_* audit columns from prepare-abraom, are large string columns
+  # that would otherwise be materialized in memory for nothing).
+  header <- strsplit(readLines(if (grepl("[.]gz$", path, ignore.case = TRUE)) gzfile(path) else path,
+                                n = 1), "\t", fixed = TRUE)[[1]]
+  wanted <- intersect(header, c(
+    "CHROM", "chrom", "Chromosome", "CHROMOSOME",
+    "POS", "pos", "Start_Position", "START", "GENOME_START",
+    "REF", "ref", "Reference_Allele", "GENOMIC_WT_ALLELE",
+    "ALT", "alt", "Tumor_Seq_Allele2", "GENOMIC_MUT_ALLELE",
+    "AF", "af", "ABraOM_AF", "brazilian_af", "AF_sabe",
+    "AC", "ac", "allele_count",
+    "AN", "an", "allele_number",
+    "HOM", "hom", "nhomalt", "n_hom"))
+  d <- read_variants(path, "\t", select = wanted)
   out <- data.frame(
     canonical_key = canonical_variant_key(build,
       coalesce_columns(d, c("CHROM", "chrom", "Chromosome", "CHROMOSOME")),

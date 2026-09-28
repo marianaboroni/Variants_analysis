@@ -474,7 +474,7 @@ create_tumoronly_figures <- function(variants, audit, figures_dir, figure_data_d
         } else if (ext == "svg") {
           suppressWarnings(grDevices::svg(f, width = width, height = height))
         } else if (ext == "png") {
-          grDevices::png(f, width = width, height = height, units = "in", res = 300)
+          grDevices::png(f, width = width, height = height, units = "in", res = 300, type = "cairo")
         } else {
           stop("unsupported figure extension")
         }

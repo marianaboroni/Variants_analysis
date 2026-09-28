@@ -7,19 +7,32 @@
 
 # ---- structured logging ------------------------------------------------------
 
+#' @keywords internal
+.log_step_timing <- new.env(parent = emptyenv())
+
 #' Emit a structured, single-line log message.
+#'
+#' Every call reports elapsed wall-clock time since the previous log_step()
+#' call (step_seconds) and since the first one in this process (total_seconds),
+#' so a run's timing breakdown can be read straight off the log without
+#' instrumenting each call site.
 #'
 #' @param step short step identifier
 #' @param msg human-readable message
 #' @param ... named fields appended as key=value (e.g. n=1000, sample="S1")
 #' @keywords internal
 log_step <- function(step, msg, ...) {
-  fields <- list(...)
-  kv <- ""
-  if (length(fields) > 0) {
-    kv <- paste0(" | ", paste(sprintf("%s=%s", names(fields),
-      vapply(fields, function(v) as.character(v)[1], character(1))), collapse = " "))
-  }
+  now <- Sys.time()
+  start <- .log_step_timing$start %||% now
+  last <- .log_step_timing$last %||% now
+  if (is.null(.log_step_timing$start)) .log_step_timing$start <- now
+  step_seconds <- round(as.numeric(difftime(now, last, units = "secs")), 2)
+  total_seconds <- round(as.numeric(difftime(now, start, units = "secs")), 2)
+  .log_step_timing$last <- now
+
+  fields <- c(list(...), list(step_seconds = step_seconds, total_seconds = total_seconds))
+  kv <- paste0(" | ", paste(sprintf("%s=%s", names(fields),
+    vapply(fields, function(v) as.character(v)[1], character(1))), collapse = " "))
   message(sprintf("[%s] %s%s", step, msg, kv))
 }
 

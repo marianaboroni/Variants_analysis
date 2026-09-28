@@ -43,8 +43,13 @@ run_tumor_only <- function(config, run_id = NULL) {
     chunk_size = cfg_get(cfg, c("input", "chunk_size"), NULL))
   variants <- ing$variants
   n_input <- nrow(variants)
+  input_format <- ing$format
   write_tsv(ing$schema_report, file.path(dirs$tables, "input_schema_report.tsv"))
-  log_step("run", "input ingested", format = ing$format, n = n_input)
+  log_step("run", "input ingested", format = input_format, n = n_input)
+  # ing$variants held a pre-standardization copy of the whole cohort table; at
+  # WGS-cohort scale (10M+ rows), leaving it bound in this long-lived function
+  # scope for the rest of the run doubles up on memory for no reason.
+  rm(ing); gc()
 
   variants <- standardize_variant_table(variants, cfg)
   variants <- attach_sample_metadata(variants, cfg)
@@ -54,8 +59,10 @@ run_tumor_only <- function(config, run_id = NULL) {
   hf <- add_sample_qc_and_hard_filters(variants, cfg)
   variants <- hf$variants
   sample_qc <- hf$sample_qc
+  rm(hf); gc()
   recurrence <- compute_cohort_recurrence(variants, cfg)
   variants <- merge_recurrence_features(variants, recurrence)
+  rm(recurrence); gc()
 
   adaptive_thresholds <- NULL
   if (isTRUE(cfg_get(cfg, c("adaptive_filtering", "enabled"), TRUE))) {
@@ -89,6 +96,11 @@ run_tumor_only <- function(config, run_id = NULL) {
   log_step("run", "auxiliary modules: ML, TMB/burden, clonality")
   aux <- run_auxiliary_modules(variants, cfg)
   variants <- aux$variants
+  # aux$variants is now the same near-final-width cohort table as `variants`;
+  # drop the duplicate reference (keep the rest of aux: module_status etc.,
+  # used below and by write_auxiliary_module_tables()).
+  aux$variants <- NULL
+  gc()
   variants <- add_tumoronly_evidence_columns(variants, cfg)     # v2 traceability layer; no classification changes
 
   # ---- outputs ----------------------------------------------------------
@@ -142,7 +154,7 @@ run_tumor_only <- function(config, run_id = NULL) {
   }
 
   manifest <- build_run_manifest(cfg, run_dir, rid, build, variants, n_input, audit, t0)
-  manifest$input_format <- ing$format
+  manifest$input_format <- input_format
   v2_artifacts <- tryCatch(
     write_tumoronly_v2_artifacts(variants, cfg, dirs, manifest, audit),
     error = function(e) {
