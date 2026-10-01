@@ -148,28 +148,32 @@ compute_cohort_recurrence <- function(x, cfg) {
     tumor_type_total_samples = data.table::uniqueN(sample_id)
   ), by = tumor_type]
 
+  # WGS cohorts are mostly private variants, so nearly every row is its own
+  # group. Per-group R calls (uniqueN(), safe_median()) cost one R closure per
+  # group -- millions of them -- so instead: count distinct samples as .N over
+  # pre-deduplicated (key, sample_id) rows, and use median(na.rm = TRUE),
+  # which data.table evaluates in C (GForce). Same semantics: uniqueN() counts
+  # NA as one value, as unique() does; an all-NA group still yields NA_real_.
+  n_distinct_samples <- function(keys, name) {
+    unique(dt, by = c(keys, "sample_id"))[, stats::setNames(list(.N), name), by = keys]
+  }
   by_variant <- dt[, .(
-    variant_n_samples = data.table::uniqueN(sample_id),
-    variant_median_vaf = safe_median(vaf),
-    variant_median_alt_count = safe_median(alt_count),
-    variant_median_dp = safe_median(dp)
+    variant_median_vaf = median(vaf, na.rm = TRUE),
+    variant_median_alt_count = median(alt_count, na.rm = TRUE),
+    variant_median_dp = median(dp, na.rm = TRUE)
   ), by = .(variant_id, chrom, pos, ref, alt)]
+  by_variant <- merge(n_distinct_samples(c("variant_id", "chrom", "pos", "ref", "alt"), "variant_n_samples"),
+                      by_variant, by = c("variant_id", "chrom", "pos", "ref", "alt"), sort = FALSE)
   by_variant[, variant_cohort_freq := variant_n_samples / total_samples]
 
-  by_locus <- dt[, .(
-    locus_n_samples = data.table::uniqueN(sample_id)
-  ), by = locus_id]
+  by_locus <- n_distinct_samples("locus_id", "locus_n_samples")
   by_locus[, locus_cohort_freq := locus_n_samples / total_samples]
 
-  by_variant_tumor <- dt[, .(
-    variant_tumor_type_n_samples = data.table::uniqueN(sample_id)
-  ), by = .(variant_id, tumor_type)]
+  by_variant_tumor <- n_distinct_samples(c("variant_id", "tumor_type"), "variant_tumor_type_n_samples")
   by_variant_tumor <- merge(by_variant_tumor, tumor_type_samples, by = "tumor_type", all.x = TRUE)
   by_variant_tumor[, variant_tumor_type_freq := variant_tumor_type_n_samples / tumor_type_total_samples]
 
-  by_locus_tumor <- dt[, .(
-    locus_tumor_type_n_samples = data.table::uniqueN(sample_id)
-  ), by = .(locus_id, tumor_type)]
+  by_locus_tumor <- n_distinct_samples(c("locus_id", "tumor_type"), "locus_tumor_type_n_samples")
   by_locus_tumor <- merge(by_locus_tumor, tumor_type_samples, by = "tumor_type", all.x = TRUE)
   by_locus_tumor[, locus_tumor_type_freq := locus_tumor_type_n_samples / tumor_type_total_samples]
 
