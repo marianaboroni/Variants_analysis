@@ -59,25 +59,44 @@ annotate_cosmic <- function(x, cfg, build) {
   matched <- which(hit)
   if (length(matched) > 0) {
     tt <- as.character(x$tumor_type); st <- subtype
-    # long rows split by key for fast lookup
-    long_by_key <- split(seq_len(nrow(long)), long$canonical_key)
-    cache <- new.env(parent = emptyenv())
-    ctx_list <- lapply(matched, function(i) {
-      ck <- paste(db$canonical_key[idx[i]], tt[i], st[i], sep = "\r")
-      if (!is.null(cache[[ck]])) return(cache[[ck]])
-      rows <- long[long_by_key[[db$canonical_key[idx[i]]]], , drop = FALSE]
-      lr <- data.frame(site = rows$cosmic_primary_site, hist = rows$cosmic_histology,
-                       subtype = rows$cosmic_subtype, count = rows$occurrence_count,
-                       stringsAsFactors = FALSE)
-      allowed <- harmonize_sample_tumor(tt[i], st[i], mapping)
-      ctx <- classify_cosmic_tumor_context(lr, allowed, sample_known = nrow(allowed) > 0,
+    # Classify once per distinct (COSMIC key, tumor type, subtype) and map the
+    # result back to every matched row. At WGS scale this replaces a per-row
+    # loop, a split() over the whole long table (tens of millions of rows),
+    # and a do.call(rbind) over hundreds of thousands of one-row data.frames.
+    mkey <- db$canonical_key[idx[matched]]
+    combo <- paste(mkey, tt[matched], st[matched], sep = "\r")
+    first <- which(!duplicated(combo))
+    combo_of_row <- match(combo, combo[first])
+    u <- matched[first]; ukey <- mkey[first]
+
+    long_rows <- which(long$canonical_key %in% ukey)
+    lr_all <- data.frame(site = long$cosmic_primary_site[long_rows],
+                         hist = long$cosmic_histology[long_rows],
+                         subtype = long$cosmic_subtype[long_rows],
+                         count = long$occurrence_count[long_rows],
+                         stringsAsFactors = FALSE)
+    lr_by_key <- split(seq_along(long_rows), long$canonical_key[long_rows])
+
+    # harmonized categories depend only on (tumor type, subtype); key on an
+    # NA-safe encoding so NA and the string "NA" stay distinct
+    na_safe <- function(z) ifelse(is.na(z), "\001", z)
+    tts <- paste(na_safe(tt[u]), na_safe(st[u]), sep = "\r")
+    tts_first <- which(!duplicated(tts))
+    allowed_by_tts <- lapply(tts_first, function(j) harmonize_sample_tumor(tt[u[j]], st[u[j]], mapping))
+    allowed_of <- match(tts, tts[tts_first])
+
+    ctx_df <- data.table::rbindlist(lapply(seq_along(u), function(j) {
+      i <- u[j]
+      r <- lr_by_key[[ukey[j]]]
+      lr <- structure(list(site = lr_all$site[r], hist = lr_all$hist[r],
+                           subtype = lr_all$subtype[r], count = lr_all$count[r]),
+                      class = "data.frame", row.names = c(NA_integer_, -length(r)))
+      allowed <- allowed_by_tts[[allowed_of[j]]]
+      classify_cosmic_tumor_context(lr, allowed, sample_known = nrow(allowed) > 0,
         sample_subtype_available = !is.na(st[i]) && nzchar(st[i]), pan_threshold = pan_threshold,
         os4_min = os4_min, om4_min = om4_min)
-      cache[[ck]] <- ctx
-      ctx
-    })
-    ctx_df <- do.call(rbind, ctx_list)
-    for (col in names(ctx_df)) x[[col]][matched] <- ctx_df[[col]]
+    }))
+    for (col in names(ctx_df)) x[[col]][matched] <- ctx_df[[col]][combo_of_row]
   }
 
   # Regression aid: reproduce the LEGACY behaviour where OS4/OM4 came from the

@@ -211,7 +211,10 @@ ctx_row <- function(status, match_level, site_match, histology_match, subtype_ma
   global_evidence_only <- !isTRUE(includes_sample)   # ctx_row is only called on genomic matches
   global_recurrent <- total >= om4_min
   interpretation <- if (isTRUE(evaluable)) "evaluable" else "not_evaluable"
-  data.frame(
+  # Built as a list + class rather than data.frame(): annotate_cosmic() calls
+  # this once per COSMIC-matched variant (~10^5 at WGS scale), where
+  # data.frame()'s argument deparsing dominated. Same one-row data.frame.
+  structure(list(
     COSMIC_TUMOR_CONTEXT_STATUS = status,
     COSMIC_MATCH_LEVEL = match_level,
     COSMIC_SITE_MATCH = site_match,
@@ -234,8 +237,8 @@ ctx_row <- function(status, match_level, site_match, histology_match, subtype_ma
     COSMIC_GLOBAL_RECURRENT = global_recurrent,
     COSMIC_GLOBAL_EVIDENCE_ONLY = global_evidence_only,
     COSMIC_CONTEXT_INTERPRETATION = interpretation,
-    COSMIC_TUMOR_CONTEXT_REASON = reason,
-    stringsAsFactors = FALSE)
+    COSMIC_TUMOR_CONTEXT_REASON = reason),
+    class = "data.frame", row.names = c(NA_integer_, -1L))
 }
 
 #' Exploratory weight-sensitivity analysis for the COSMIC context score.
