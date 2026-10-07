@@ -22,17 +22,23 @@
 #       -C alleles, no -v), normalize against the reference, and index.
 #       Sites with no read coverage are absent (= missing, not 0/0).
 #
-# Requires bcftools (with bgzip/tabix) on PATH.
+# Requires bcftools, bgzip and tabix (htslib) on PATH: on the HPC,
+# `module load bcftools htslib` (see scripts/genotype_aims.slurm).
 
 set -euo pipefail
 
 die() { echo "$*" >&2; exit 1; }
 
-command -v bcftools >/dev/null 2>&1 || {
-  echo "bcftools not found on PATH. Activate an environment that provides it, e.g.:" >&2
-  echo "  export PATH=/home/mmparedese/miniconda3/envs/vcfman/bin:\$PATH" >&2
-  exit 1
-}
+for tool in bcftools bgzip tabix; do
+  command -v "$tool" >/dev/null 2>&1 || {
+    echo "$tool not found on PATH. Load the modules that provide it, e.g.:" >&2
+    echo "  module load bcftools htslib        # check names with: module avail bcftools htslib" >&2
+    echo "or activate an environment that provides it, e.g.:" >&2
+    echo "  export PATH=/home/mmparedese/miniconda3/envs/vcfman/bin:\$PATH" >&2
+    exit 1
+  }
+done
+SECONDS=0
 
 mode="${1:-}"
 case "$mode" in
@@ -104,7 +110,7 @@ case "$mode" in
 
     n_total=$(bcftools view -H "$out" | wc -l)
     n_homref=$(bcftools view -H -i 'GT="0/0"' "$out" | wc -l)
-    echo "[call] written: $out (sites=$n_total, 0/0=$n_homref)" >&2
+    echo "[call] written: $out (sites=$n_total, 0/0=$n_homref, seconds=$SECONDS)" >&2
     ;;
 
   *)
