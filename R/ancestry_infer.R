@@ -230,7 +230,7 @@ load_aims_panel <- function(cfg, build) {
   path <- cfg_get(cfg, c("ancestry", "marker_panel", "path"), NULL)
   if (is.null(path) || is.na(path) || !file.exists(path)) return(NULL)
   d <- read_variants(path, "\t")
-  key <- if ("canonical_key" %in% names(d)) d$canonical_key else
+  key <- if ("canonical_key" %in% names(d)) panel_canonical_key(d$canonical_key, build) else
     canonical_variant_key(build,
       coalesce_columns(d, c("CHROM", "chrom", "chromosome")),
       coalesce_columns(d, c("POS", "pos", "position")),
@@ -243,4 +243,20 @@ load_aims_panel <- function(cfg, build) {
   out <- out[!duplicated(out$canonical_key), , drop = FALSE]
   attr(out, "version") <- cfg_get(cfg, c("ancestry", "marker_panel", "version"), "aims_v1")
   out
+}
+
+#' Rebuild panel keys in this package's canonical form (BUILD|CHROM|POS|REF|ALT)
+#' from either that form (any build label) or the common CHROM:POS:REF:ALT form,
+#' so chr-prefix/build-label differences can't silently match zero markers.
+#' @keywords internal
+panel_canonical_key <- function(key, build) {
+  key <- as.character(key)
+  parts <- strsplit(key, "[|:]")
+  n <- lengths(parts)
+  if (!all(n %in% c(4L, 5L))) {
+    stop(sprintf(paste0("ancestry panel canonical_key not understood (e.g. '%s'); expected ",
+      "BUILD|CHROM|POS|REF|ALT or CHROM:POS:REF:ALT"), key[which(!n %in% c(4L, 5L))[1]]), call. = FALSE)
+  }
+  field <- function(i) vapply(seq_along(parts), function(j) parts[[j]][n[j] - 4L + i], character(1))
+  canonical_variant_key(build, field(1), field(2), field(3), field(4))
 }

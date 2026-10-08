@@ -15,7 +15,8 @@
 #       CHROM<TAB>POS<TAB>REF,ALT, contig names matched to the FASTA
 #       ("chr1" vs "1"), sorted in FASTA order, bgzipped + tabix-indexed.
 #       The panel needs CHROM/POS/REF/ALT columns (case-insensitive; also
-#       chromosome/position) or a canonical_key column (BUILD|CHROM|POS|REF|ALT).
+#       chromosome/position) or a canonical_key column (BUILD|CHROM|POS|REF|ALT
+#       or CHROM:POS:REF:ALT).
 #
 #   scripts/genotype_aims.sh call <sample.cram|bam> <reference.fasta> <sites.tsv.gz> <out.vcf.gz>
 #       Genotype one sample at the panel sites (bcftools mpileup | call -m
@@ -71,7 +72,11 @@ case "$mode" in
       {
         gsub(/\r/, "")
         if (c && p && r && a) { chrom = $c; pos = $p; ref = toupper($r); alt = toupper($a) }
-        else { split($k, f, "|"); chrom = f[2]; pos = f[3]; ref = toupper(f[4]); alt = toupper(f[5]) }
+        else {                                       # BUILD|CHROM|POS|REF|ALT or CHROM:POS:REF:ALT
+          nf = split($k, f, /[|:]/); o = nf - 4
+          if (o < 0 || o > 1) { skipped++; next }
+          chrom = f[1 + o]; pos = f[2 + o]; ref = toupper(f[3 + o]); alt = toupper(f[4 + o])
+        }
         if (ref !~ /^[ACGT]$/ || alt !~ /^[ACGT]$/ || pos !~ /^[0-9]+$/) { skipped++; next }
         sub(/^chr/, "", chrom); if (chrom == "M") chrom = "MT"
         if (has_chr) chrom = (chrom == "MT") ? "chrM" : "chr" chrom
