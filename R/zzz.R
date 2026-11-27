@@ -32,5 +32,7 @@ utils::globalVariables(c(
   "clonality_method", "clonality_methods", "driver_class", "interpretation",
   "limitation", "n_clonal", "n_clonality_evaluable", "n_subclonal",
   "n_tmb_countable", "purity_used", "subclonal_fraction", "tmb_countable",
-  "tmb_mut_per_mb"
+  "tmb_mut_per_mb",
+  "seg_chrom", "seg_start", "seg_end", "q_chrom", "q_pos", "i.row_i",
+  "x.total_cn", "x.minor_cn", "x.major_cn", "copy_number_source"
 ))

@@ -24,12 +24,22 @@ add_clonality_estimates <- function(variants, cfg = NULL) {
     default = NA
   ))
   purity <- normalize_fraction(purity_raw)
+  somatic_ok <- variants$final_class %in% c("high_confidence_somatic", "probable_somatic")
 
   total_cn_raw <- to_numeric_safe(coalesce_columns(
     variants,
     c("total_cn", "Total_CN", "TOTAL_CN", "CN", "copy_number", "local_cn", "tcn"),
     default = NA
   ))
+  copy_number_source <- ifelse(!is.na(total_cn_raw) & total_cn_raw > 0, "variant_column", "default_copy_neutral")
+
+  # Fill missing per-variant copy number from per-sample segment files
+  # (input.sample_metadata column `copy_number_file`, e.g. PURPLE cnv.somatic).
+  # Only somatic candidates are looked up: they are the only rows that get a CCF.
+  seg_cn <- segment_copy_number_for_variants(variants, which(somatic_ok & copy_number_source != "variant_column"))
+  from_segment <- copy_number_source != "variant_column" & !is.na(seg_cn$total_cn) & seg_cn$total_cn > 0
+  total_cn_raw[from_segment] <- seg_cn$total_cn[from_segment]
+  copy_number_source[from_segment] <- "segment_file"
   multiplicity_raw <- to_numeric_safe(coalesce_columns(
     variants,
     c("multiplicity", "mutation_multiplicity", "mut_cn", "mutation_cn"),
@@ -45,8 +55,7 @@ add_clonality_estimates <- function(variants, cfg = NULL) {
   multiplicity <- multiplicity_raw
   multiplicity[is.na(multiplicity) | multiplicity <= 0] <- default_multiplicity
 
-  somatic_ok <- variants$final_class %in% c("high_confidence_somatic", "probable_somatic")
-  has_vaf <- !is.na(variants$vaf) & variants$vaf >= 0 & variants$vaf <= 1
+  has_vaf <-!is.na(variants$vaf) & variants$vaf >= 0 & variants$vaf <= 1
   has_purity <- !is.na(purity) & purity > 0 & purity <= 1
   has_cn <- !is.na(total_cn_raw) & total_cn_raw > 0
   has_multiplicity <- !is.na(multiplicity_raw) & multiplicity_raw > 0
@@ -58,6 +67,9 @@ add_clonality_estimates <- function(variants, cfg = NULL) {
 
   variants$purity_used <- purity
   variants$total_cn_used <- total_cn
+  variants$minor_cn_used <- seg_cn$minor_cn
+  variants$major_cn_used <- seg_cn$major_cn
+  variants$copy_number_source <- copy_number_source
   variants$multiplicity_used <- multiplicity
   variants$copy_number_available <- has_cn
   variants$multiplicity_available <- has_multiplicity
@@ -77,6 +89,9 @@ add_clonality_estimates <- function(variants, cfg = NULL) {
 add_empty_clonality_columns <- function(variants, method = "not_evaluated") {
   variants$purity_used <- NA_real_
   variants$total_cn_used <- NA_real_
+  variants$minor_cn_used <- NA_real_
+  variants$major_cn_used <- NA_real_
+  variants$copy_number_source <- NA_character_
   variants$multiplicity_used <- NA_real_
   variants$copy_number_available <- FALSE
   variants$multiplicity_available <- FALSE
@@ -170,6 +185,7 @@ build_clonality_summary <- function(variants) {
     return(data.frame())
   }
   dt <- data.table::as.data.table(variants)
+  if (!"copy_number_source" %in% names(dt)) dt[, copy_number_source := NA_character_]
   somatic_classes <- c("high_confidence_somatic", "probable_somatic")
   out <- dt[, .(
     n_somatic_variants = sum(final_class %in% somatic_classes, na.rm = TRUE),
@@ -180,7 +196,8 @@ build_clonality_summary <- function(variants) {
     median_somatic_vaf = safe_median(vaf[final_class %in% somatic_classes]),
     median_ccf = safe_median(ccf_estimate[final_class %in% somatic_classes]),
     median_purity_used = safe_median(purity_used),
-    clonality_methods = collapse_unique(clonality_method[final_class %in% somatic_classes])
+    clonality_methods = collapse_unique(clonality_method[final_class %in% somatic_classes]),
+    copy_number_sources = collapse_unique(copy_number_source[final_class %in% somatic_classes])
   ), by = .(sample_id, tumor_type)]
   out[, clonal_fraction := ifelse(n_clonality_evaluable > 0, n_clonal / n_clonality_evaluable, NA_real_)]
   out[, subclonal_fraction := ifelse(n_clonality_evaluable > 0, n_subclonal / n_clonality_evaluable, NA_real_)]

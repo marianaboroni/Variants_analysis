@@ -224,7 +224,12 @@ Auxiliary modules are summarized in `tables/module_status.tsv`:
   Without that denominator, the module reports countable burden but marks TMB as
   not evaluable.
 - Clonality uses purity/CN/multiplicity when present. Without purity, VAF-proxy
-  classes are labelled as such.
+  classes are labelled as such. Purity and a per-sample copy-number segment file
+  are given in `input.sample_metadata` (columns `tumor_purity` and
+  `copy_number_file`, e.g. PURPLE `<sample>.purple.cnv.somatic.tsv`); each
+  somatic candidate takes the total copy number of the segment containing it,
+  falling back to copy-neutral (`clonality.default_total_cn`) when no segment
+  matches. `copy_number_source` records which was used.
 - Ancestry requires a user-supplied AIMs panel and is experimental,
   non-diagnostic, and never used to identify race or ethnicity.
 - ML requires human-reviewed labels and an explicitly activated model. ML
